@@ -1,0 +1,130 @@
+name: Release
+
+# Automatic semantic-version release, driven entirely by Conventional Commit
+# messages on main — no manual "pick a bump type" step. A commit containing
+# `BREAKING CHANGE:` or a `!` after the type (e.g. `feat!:`) triggers a major
+# bump; `feat:` triggers minor; `fix:`/`perf:` triggers patch. Anything else
+# (chore/docs/refactor/test/ci/style) does not cut a release on its own.
+#
+# The version-bump step below re-triggers this workflow's own push to main,
+# but that second run finds zero commits since the tag it just created and
+# exits at the "Determine version bump" step — no infinite loop.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.bump.outputs.should_release }}
+      bump_type: ${{ steps.bump.outputs.bump_type }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npx vitest run
+
+      - name: Determine version bump from commit messages
+        id: bump
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            RANGE="$(git rev-list --max-parents=0 HEAD)..HEAD"
+          else
+            RANGE="$LAST_TAG..HEAD"
+          fi
+          echo "Scanning commits in range: $RANGE (since: ${LAST_TAG:-<repo start>})"
+          COMMITS="$(git log "$RANGE" --pretty=format:'%s%n%b' || true)"
+
+          BUMP=""
+          if echo "$COMMITS" | grep -qE '(^|\n)[a-zA-Z]+(\([^)]+\))?!:|BREAKING CHANGE:'; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qE '(^|\n)feat(\([^)]+\))?:'; then
+            BUMP="minor"
+          elif echo "$COMMITS" | grep -qE '(^|\n)(fix|perf)(\([^)]+\))?:'; then
+            BUMP="patch"
+          fi
+
+          if [ -z "$BUMP" ]; then
+            echo "No release-worthy commits (feat/fix/perf/BREAKING CHANGE) since ${LAST_TAG:-repo start} — skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Bump type: $BUMP"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "bump_type=$BUMP" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    needs: test
+    if: needs.test.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Bump version
+        id: version
+        run: |
+          # npm's own "version" lifecycle script (see package.json) runs
+          # version-bump.mjs and stages manifest.json + versions.json for us.
+          npm version "${{ needs.test.outputs.bump_type }}" --no-git-tag-version
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and tag
+        run: |
+          git add package.json package-lock.json manifest.json versions.json
+          git commit -m "chore(release): v${{ steps.version.outputs.version }}"
+          git tag "${{ steps.version.outputs.version }}"
+          git push origin HEAD:main
+          git push origin --tags
+
+      - name: Build
+        run: npm run build
+
+      - name: Attest build artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            styles.css
+
+      - name: Create GitHub Release (draft — review and publish manually)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+          draft: true
+          generate_release_notes: true
+          files: |
+            main.js
+            manifest.json
+            styles.css

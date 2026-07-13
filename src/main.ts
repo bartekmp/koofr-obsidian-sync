@@ -521,6 +521,18 @@ export default class KoofrSyncPlugin extends Plugin {
 	}
 
 	/**
+	 * Create a new folder from within the picker, in a given mount/path.
+	 * The mount being browsed may differ from the one currently configured.
+	 */
+	async createFolderForPicker(mountId: string, parentPath: string, name: string): Promise<void> {
+		if (!this.koofrClient) {
+			throw new Error('Not connected to Koofr');
+		}
+		const fullPath = parentPath === '/' ? `/${name}` : `${parentPath}/${name}`;
+		await this.koofrClient.createFolder(fullPath, mountId);
+	}
+
+	/**
 	 * Called when the user selects a new mount/folder from the picker.
 	 * Stores settings, clears stale sync state, and reconfigures components.
 	 */

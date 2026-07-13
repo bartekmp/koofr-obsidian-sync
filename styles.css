@@ -18,6 +18,21 @@
 	font-size: 12px;
 }
 
+.koofr-sync-interval-ruler {
+	display: flex;
+	justify-content: space-between;
+	margin-top: -8px;
+	margin-bottom: 12px;
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+.koofr-sync-folder-browser-create-row {
+	margin-bottom: 12px;
+	padding-top: 4px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
 .koofr-sync-auth-user-code {
 	font-size: 1.5em;
 	color: var(--text-accent);

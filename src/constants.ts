@@ -23,3 +23,19 @@ export const PLUGIN_INFO = {
 
 // Link shown in settings for generating an app-specific password
 export const KOOFR_APP_PASSWORD_URL = 'https://app.koofr.net/app/admin/preferences/password';
+
+/**
+ * Discrete stops for the "Automatic sync interval" slider, in minutes.
+ * 0 means manual-only. The slider itself is index-based over this list so
+ * ticks are evenly spaced regardless of how unevenly the minute values grow.
+ */
+export const SYNC_INTERVAL_OPTIONS: ReadonlyArray<{ minutes: number; label: string }> = [
+	{ minutes: 0, label: 'Manual' },
+	{ minutes: 1, label: '1 min' },
+	{ minutes: 5, label: '5 min' },
+	{ minutes: 15, label: '15 min' },
+	{ minutes: 30, label: '30 min' },
+	{ minutes: 60, label: '1 hour' },
+	{ minutes: 120, label: '2 hours' },
+	{ minutes: 240, label: '4 hours' },
+];
