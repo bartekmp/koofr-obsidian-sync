@@ -2,7 +2,7 @@
  * Modal for picking a Koofr mount and browsing its folders
  */
 
-import { App, Modal, Setting } from 'obsidian';
+import { App, Modal, Notice, Setting } from 'obsidian';
 import { KoofrFileInfo, KoofrMount } from '../types';
 import { RootFolderWarningModal } from './modals';
 import { t } from '../i18n';
@@ -15,6 +15,7 @@ export interface FolderSelection {
 }
 
 type FolderListFn = (mountId: string, path: string) => Promise<KoofrFileInfo[]>;
+type FolderCreateFn = (mountId: string, parentPath: string, name: string) => Promise<void>;
 
 export interface FolderBrowserOptions {
 	/** Show a confirmation warning when the mount root is selected (default: false) */
@@ -22,7 +23,8 @@ export interface FolderBrowserOptions {
 }
 
 /**
- * Modal that lets the user pick a Koofr mount, then browse and select a folder within it.
+ * Modal that lets the user pick a Koofr mount, then browse, create, and
+ * select a folder within it.
  */
 export class FolderBrowserModal extends Modal {
 	private mounts: KoofrMount[];
@@ -30,14 +32,18 @@ export class FolderBrowserModal extends Modal {
 	private currentPath: string[] = [];
 	private onSelect: (selection: FolderSelection) => void;
 	private listFolders: FolderListFn;
+	private createFolder: FolderCreateFn;
 	private contentEl_body: HTMLElement;
 	private loading = false;
 	private warnOnRootSelect: boolean;
+	private newFolderName = '';
+	private creatingFolder = false;
 
 	constructor(
 		app: App,
 		mounts: KoofrMount[],
 		listFolders: FolderListFn,
+		createFolder: FolderCreateFn,
 		onSelect: (selection: FolderSelection) => void,
 		initialMountId?: string,
 		initialPath?: string,
@@ -46,6 +52,7 @@ export class FolderBrowserModal extends Modal {
 		super(app);
 		this.mounts = mounts;
 		this.listFolders = listFolders;
+		this.createFolder = createFolder;
 		this.onSelect = onSelect;
 		this.warnOnRootSelect = options?.warnOnRootSelect ?? false;
 
@@ -165,6 +172,8 @@ export class FolderBrowserModal extends Modal {
 
 		// Select button for the current folder. This is also shown at the mount
 		// root (empty path) so the user can sync the entire mount if desired.
+		// The folder picked here becomes the sync destination itself — files
+		// land directly inside it, nothing is auto-created under it.
 		{
 			const isRoot = this.currentPath.length === 0;
 			const selectRow = body.createDiv({ cls: 'koofr-sync-folder-browser-select-row' });
@@ -174,6 +183,7 @@ export class FolderBrowserModal extends Modal {
 						? t('folderBrowser.selectRoot', { label: mount.name })
 						: t('folderBrowser.selectCurrent', { path: this.currentPath.join('/') })
 				)
+				.setDesc(t('folderBrowser.selectDestinationDesc'))
 				.addButton((btn) =>
 					btn
 						.setButtonText(t('folderBrowser.useThisFolder'))
@@ -196,6 +206,46 @@ export class FolderBrowserModal extends Modal {
 							} else {
 								commit();
 							}
+						})
+				);
+		}
+
+		// Create a new subfolder under the current location, then jump into it.
+		{
+			const createRow = body.createDiv({ cls: 'koofr-sync-folder-browser-create-row' });
+			let textComponentRef: { getValue(): string } | undefined;
+			new Setting(createRow)
+				.setName(t('folderBrowser.createFolder.name'))
+				.addText((text) => {
+					textComponentRef = text;
+					text.setPlaceholder(t('folderBrowser.createFolder.placeholder')).onChange((value) => {
+						this.newFolderName = value;
+					});
+				})
+				.addButton((btn) =>
+					btn
+						.setButtonText(t('folderBrowser.createFolder.button'))
+						.setDisabled(this.creatingFolder)
+						.onClick(() => {
+							void (async () => {
+								const name = (textComponentRef?.getValue() ?? this.newFolderName).trim();
+								if (!name) return;
+								this.creatingFolder = true;
+								try {
+									await this.createFolder(mount.id, this.currentPathStr, name);
+									this.currentPath.push(name);
+									this.newFolderName = '';
+								} catch (error) {
+									new Notice(
+										t('folderBrowser.createFolder.failed', {
+											message: error instanceof Error ? error.message : t('folderBrowser.unknownError'),
+										})
+									);
+								} finally {
+									this.creatingFolder = false;
+								}
+								void this.loadFolder();
+							})();
 						})
 				);
 		}

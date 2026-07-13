@@ -11,7 +11,7 @@ import {
 	ExperimentalSettings,
 	DEFAULT_EXPERIMENTAL_SETTINGS,
 } from '../types';
-import { KOOFR_APP_PASSWORD_URL } from '../constants';
+import { KOOFR_APP_PASSWORD_URL, SYNC_INTERVAL_OPTIONS } from '../constants';
 import { FolderBrowserModal, FolderSelection } from './folderBrowserModal';
 import type { SyncStatusInfo } from '../main';
 import { SyncStatus } from './statusBar';
@@ -32,6 +32,7 @@ interface KoofrPlugin {
 	triggerManualSync(): Promise<void>;
 	listMounts(): Promise<KoofrMount[]>;
 	listFoldersForPicker(mountId: string, path: string): Promise<KoofrFileInfo[]>;
+	createFolderForPicker(mountId: string, parentPath: string, name: string): Promise<void>;
 	onRemoteFolderChanged(selection: FolderSelection): Promise<void>;
 	getSyncStatusInfo(): SyncStatusInfo;
 	getExperimentalSetting<K extends keyof ExperimentalSettings>(key: K): ExperimentalSettings[K];
@@ -155,6 +156,10 @@ export class KoofrSettingTab extends PluginSettingTab {
 		const isConnected = !!this.plugin.settings.connectedEmail;
 
 		new Setting(containerEl).setName(t('settings.syncFolder.heading')).setHeading();
+		containerEl.createEl('p', {
+			text: t('settings.syncFolder.explainer'),
+			cls: 'setting-item-description koofr-sync-settings-help',
+		});
 
 		if (isConnected) {
 			const mountName = this.plugin.settings.mountName || t('settings.syncFolder.notSelected');
@@ -180,6 +185,8 @@ export class KoofrSettingTab extends PluginSettingTab {
 							this.app,
 							mounts,
 							(mountId, path) => this.plugin.listFoldersForPicker(mountId, path),
+							(mountId, parentPath, name) =>
+								this.plugin.createFolderForPicker(mountId, parentPath, name),
 							(selection: FolderSelection) => {
 								void this.plugin.onRemoteFolderChanged(selection).then(() => {
 									this.display();
@@ -209,29 +216,75 @@ export class KoofrSettingTab extends PluginSettingTab {
 
 		const { configDir } = this.app.vault;
 
-		// Sync interval
-		new Setting(containerEl)
+		// Sync interval — an index-based slider over SYNC_INTERVAL_OPTIONS so
+		// ticks land evenly spaced regardless of how unevenly the minute
+		// values grow (0, 1, 5, 15, 30, 60, 120, 240).
+		const closestIntervalIndex = (minutes: number): number => {
+			let bestIndex = 0;
+			let bestDiff = Infinity;
+			SYNC_INTERVAL_OPTIONS.forEach((opt, i) => {
+				const diff = Math.abs(opt.minutes - minutes);
+				if (diff < bestDiff) {
+					bestDiff = diff;
+					bestIndex = i;
+				}
+			});
+			return bestIndex;
+		};
+
+		const intervalSetting = new Setting(containerEl)
 			.setName(t('settings.sync.automaticInterval.name'))
-			.setDesc(t('settings.sync.automaticInterval.desc'))
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 60, 5)
-					.setValue(this.plugin.settings.syncInterval)
-					.onChange(async (value) => {
-						this.plugin.settings.syncInterval = value;
-						await this.plugin.saveSettings();
-					})
-			)
-			.addExtraButton((button) =>
-				button
-					.setIcon('reset')
-					.setTooltip(t('settings.sync.automaticInterval.resetTooltip'))
-					.onClick(async () => {
-						this.plugin.settings.syncInterval = 0;
-						await this.plugin.saveSettings();
-						this.display();
-					})
+			.setDesc(
+				t('settings.sync.automaticInterval.desc', {
+					current: SYNC_INTERVAL_OPTIONS[closestIntervalIndex(this.plugin.settings.syncInterval)].label,
+				})
 			);
+
+		intervalSetting.addSlider((slider) => {
+			slider
+				.setLimits(0, SYNC_INTERVAL_OPTIONS.length - 1, 1)
+				.setValue(closestIntervalIndex(this.plugin.settings.syncInterval))
+				.onChange(async (index) => {
+					this.plugin.settings.syncInterval = SYNC_INTERVAL_OPTIONS[index].minutes;
+					await this.plugin.saveSettings();
+					intervalSetting.setDesc(
+						t('settings.sync.automaticInterval.desc', { current: SYNC_INTERVAL_OPTIONS[index].label })
+					);
+				});
+
+			// Native tick marks at each stop, evenly spaced (Chromium/Electron
+			// renders a <datalist> bound to a range input as tick dashes).
+			// containerEl.empty() on every display() call wipes this along
+			// with the slider, so there's no risk of accumulating duplicates.
+			const datalistId = 'koofr-sync-interval-ticks';
+			slider.sliderEl.setAttribute('list', datalistId);
+			const datalist = slider.sliderEl.ownerDocument.createElement('datalist');
+			datalist.id = datalistId;
+			SYNC_INTERVAL_OPTIONS.forEach((_, i) => {
+				const option = slider.sliderEl.ownerDocument.createElement('option');
+				option.value = String(i);
+				datalist.appendChild(option);
+			});
+			slider.sliderEl.insertAdjacentElement('afterend', datalist);
+		});
+
+		intervalSetting.addExtraButton((button) =>
+			button
+				.setIcon('reset')
+				.setTooltip(t('settings.sync.automaticInterval.resetTooltip'))
+				.onClick(async () => {
+					this.plugin.settings.syncInterval = 0;
+					await this.plugin.saveSettings();
+					this.display();
+				})
+		);
+
+		// Ruler of human-readable labels below the slider, evenly spaced to
+		// line up with the tick marks above.
+		const ruler = containerEl.createDiv({ cls: 'koofr-sync-interval-ruler' });
+		for (const opt of SYNC_INTERVAL_OPTIONS) {
+			ruler.createSpan({ text: opt.label });
+		}
 
 		// Sync on file change toggle
 		new Setting(containerEl)

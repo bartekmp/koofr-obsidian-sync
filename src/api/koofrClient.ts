@@ -353,8 +353,8 @@ export class KoofrClient {
 		}
 	}
 
-	async createFolder(remotePath: string): Promise<void> {
-		const mountId = this.requireMountId();
+	async createFolder(remotePath: string, mountIdOverride?: string): Promise<void> {
+		const mountId = mountIdOverride || this.requireMountId();
 		const normalized = this.normalizeRemotePath(remotePath);
 		const parentPath = getParentPath(normalized) || '/';
 		const name = getFileName(normalized);

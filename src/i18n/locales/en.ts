@@ -102,11 +102,18 @@ export const en = {
 		changeMount: 'Change mount',
 		selectCurrent: 'Select "/{{path}}"',
 		selectRoot: 'Select the entire {{label}} (root)',
+		selectDestinationDesc: 'Your vault files will sync directly into this folder — nothing extra is created under it.',
 		useThisFolder: 'Use this folder',
 		loading: 'Loading folders...',
 		noSubfolders: 'No subfolders',
 		loadError: 'Error loading folders: {{message}}',
 		unknownError: 'Unknown error',
+		createFolder: {
+			name: 'Create a new folder here',
+			placeholder: 'Folder name',
+			button: 'Create',
+			failed: 'Could not create folder: {{message}}',
+		},
 	},
 	rootFolderWarning: {
 		title: 'Sync your entire Koofr mount?',
@@ -179,6 +186,7 @@ export const en = {
 		},
 		syncFolder: {
 			heading: 'Sync Folder',
+			explainer: 'The folder you pick below is the exact sync destination — your vault files sync directly into it. Nothing is auto-created underneath it.',
 			remoteFolder: 'Remote folder',
 			notSelected: '(not selected)',
 			currentSelection: '{{mount}}{{path}}',
@@ -190,8 +198,8 @@ export const en = {
 			heading: 'Sync Configuration',
 			automaticInterval: {
 				name: 'Automatic sync interval',
-				desc: 'Set to 0 for manual sync only (recommended for battery life)',
-				resetTooltip: 'Reset to default',
+				desc: 'Currently: {{current}}. Set to Manual for battery life — only file-change events and manual sync will run.',
+				resetTooltip: 'Reset to default (Manual)',
 			},
 			onFileChange: {
 				name: 'Sync on file change',
