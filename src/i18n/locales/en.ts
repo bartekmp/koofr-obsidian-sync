@@ -198,8 +198,7 @@ export const en = {
 			heading: 'Sync Configuration',
 			automaticInterval: {
 				name: 'Automatic sync interval',
-				desc: 'Currently: {{current}}. Set to Manual for battery life — only file-change events and manual sync will run.',
-				resetTooltip: 'Reset to default (Manual)',
+				desc: 'Set to Manual for battery life — only file-change events and manual sync will run.',
 			},
 			onFileChange: {
 				name: 'Sync on file change',
