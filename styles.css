@@ -18,13 +18,30 @@
 	font-size: 12px;
 }
 
+.koofr-sync-interval-control {
+	width: 100%;
+	padding: 0 0 16px;
+}
+
+.koofr-sync-interval-control input[type='range'] {
+	width: 100%;
+	display: block;
+}
+
 .koofr-sync-interval-ruler {
 	display: flex;
 	justify-content: space-between;
-	margin-top: -8px;
-	margin-bottom: 12px;
+	margin-top: 4px;
 	font-size: 11px;
 	color: var(--text-muted);
+}
+
+.koofr-sync-interval-ruler span:first-child {
+	text-align: left;
+}
+
+.koofr-sync-interval-ruler span:last-child {
+	text-align: right;
 }
 
 .koofr-sync-folder-browser-create-row {

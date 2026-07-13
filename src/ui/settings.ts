@@ -2,7 +2,7 @@
  * Settings tab for the Koofr Sync plugin
  */
 
-import { App, PluginSettingTab, Setting, Notice, type PluginManifest } from 'obsidian';
+import { App, PluginSettingTab, Setting, SliderComponent, Notice, type PluginManifest } from 'obsidian';
 import {
 	PluginSettings,
 	ConflictResolutionStrategy,
@@ -238,50 +238,53 @@ export class KoofrSettingTab extends PluginSettingTab {
 				t('settings.sync.automaticInterval.desc', {
 					current: SYNC_INTERVAL_OPTIONS[closestIntervalIndex(this.plugin.settings.syncInterval)].label,
 				})
+			)
+			.addExtraButton((button) =>
+				button
+					.setIcon('reset')
+					.setTooltip(t('settings.sync.automaticInterval.resetTooltip'))
+					.onClick(async () => {
+						this.plugin.settings.syncInterval = 0;
+						await this.plugin.saveSettings();
+						this.display();
+					})
 			);
 
-		intervalSetting.addSlider((slider) => {
-			slider
-				.setLimits(0, SYNC_INTERVAL_OPTIONS.length - 1, 1)
-				.setValue(closestIntervalIndex(this.plugin.settings.syncInterval))
-				.onChange(async (index) => {
-					this.plugin.settings.syncInterval = SYNC_INTERVAL_OPTIONS[index].minutes;
-					await this.plugin.saveSettings();
-					intervalSetting.setDesc(
-						t('settings.sync.automaticInterval.desc', { current: SYNC_INTERVAL_OPTIONS[index].label })
-					);
-				});
-
-			// Native tick marks at each stop, evenly spaced (Chromium/Electron
-			// renders a <datalist> bound to a range input as tick dashes).
-			// containerEl.empty() on every display() call wipes this along
-			// with the slider, so there's no risk of accumulating duplicates.
-			const datalistId = 'koofr-sync-interval-ticks';
-			slider.sliderEl.setAttribute('list', datalistId);
-			const datalist = slider.sliderEl.ownerDocument.createElement('datalist');
-			datalist.id = datalistId;
-			SYNC_INTERVAL_OPTIONS.forEach((_, i) => {
-				const option = slider.sliderEl.ownerDocument.createElement('option');
-				option.value = String(i);
-				datalist.appendChild(option);
+		// The slider + its tick labels live in their own full-width block below
+		// the Setting row, not inside Setting's narrow .setting-item-control
+		// column — that column is sized for compact controls (toggles,
+		// dropdowns) and squashes a multi-stop labeled slider, and a ruler
+		// appended outside it can't line up with the slider's actual width.
+		const intervalControl = containerEl.createDiv({ cls: 'koofr-sync-interval-control' });
+		const slider = new SliderComponent(intervalControl)
+			.setLimits(0, SYNC_INTERVAL_OPTIONS.length - 1, 1)
+			.setValue(closestIntervalIndex(this.plugin.settings.syncInterval))
+			.onChange(async (index) => {
+				this.plugin.settings.syncInterval = SYNC_INTERVAL_OPTIONS[index].minutes;
+				await this.plugin.saveSettings();
+				intervalSetting.setDesc(
+					t('settings.sync.automaticInterval.desc', { current: SYNC_INTERVAL_OPTIONS[index].label })
+				);
 			});
-			slider.sliderEl.insertAdjacentElement('afterend', datalist);
+
+		// Native tick marks at each stop, evenly spaced (Chromium/Electron
+		// renders a <datalist> bound to a range input as tick dashes).
+		// containerEl.empty() on every display() call wipes this along with
+		// the slider, so there's no risk of accumulating duplicates.
+		const datalistId = 'koofr-sync-interval-ticks';
+		slider.sliderEl.setAttribute('list', datalistId);
+		const datalist = slider.sliderEl.ownerDocument.createElement('datalist');
+		datalist.id = datalistId;
+		SYNC_INTERVAL_OPTIONS.forEach((_, i) => {
+			const option = slider.sliderEl.ownerDocument.createElement('option');
+			option.value = String(i);
+			datalist.appendChild(option);
 		});
+		slider.sliderEl.insertAdjacentElement('afterend', datalist);
 
-		intervalSetting.addExtraButton((button) =>
-			button
-				.setIcon('reset')
-				.setTooltip(t('settings.sync.automaticInterval.resetTooltip'))
-				.onClick(async () => {
-					this.plugin.settings.syncInterval = 0;
-					await this.plugin.saveSettings();
-					this.display();
-				})
-		);
-
-		// Ruler of human-readable labels below the slider, evenly spaced to
-		// line up with the tick marks above.
-		const ruler = containerEl.createDiv({ cls: 'koofr-sync-interval-ruler' });
+		// Ruler of human-readable labels below the slider, in the same
+		// full-width container so they actually line up with its ticks.
+		const ruler = intervalControl.createDiv({ cls: 'koofr-sync-interval-ruler' });
 		for (const opt of SYNC_INTERVAL_OPTIONS) {
 			ruler.createSpan({ text: opt.label });
 		}
