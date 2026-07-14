@@ -24,7 +24,7 @@ jobs:
       should_release: ${{ steps.bump.outputs.should_release }}
       bump_type: ${{ steps.bump.outputs.bump_type }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -73,7 +73,7 @@ jobs:
     if: needs.test.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
