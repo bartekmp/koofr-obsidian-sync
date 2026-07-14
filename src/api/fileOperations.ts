@@ -13,11 +13,15 @@ import { getParentPath } from '../utils/pathUtils';
 export class FileOperations {
 	private client: KoofrClient;
 	private pendingFolderEnsures = new Map<string, Promise<void>>();
-	private skipFolderChecks: () => boolean;
+	// Remote folder paths already known to exist — seeded once per sync from
+	// the sync engine's fresh remote snapshot (see seedKnownFolders) and
+	// grown as folders get created. Koofr has no incremental change API, so
+	// that snapshot is already fetched every sync; checking against it here
+	// is free, unlike a live existence request per upload.
+	private knownFolders = new Set<string>();
 
-	constructor(client: KoofrClient, skipFolderChecks: () => boolean = () => false) {
+	constructor(client: KoofrClient) {
 		this.client = client;
-		this.skipFolderChecks = skipFolderChecks;
 	}
 
 	/**
@@ -28,14 +32,27 @@ export class FileOperations {
 	}
 
 	/**
+	 * Seed the set of remote folder paths already known to exist, so
+	 * upload/move calls this sync skip the create-folder round trip for
+	 * anything the caller already knows is there.
+	 */
+	seedKnownFolders(remotePaths: Iterable<string>): void {
+		for (const path of remotePaths) {
+			this.knownFolders.add(path);
+		}
+	}
+
+	/**
 	 * Upload a file to Koofr
 	 */
-	async uploadFile(remotePath: string, content: ArrayBuffer, modifiedMs?: number): Promise<KoofrFileInfo> {
+	async uploadFile(
+		remotePath: string,
+		content: ArrayBuffer,
+		modifiedMs?: number
+	): Promise<KoofrFileInfo> {
 		logger.debug('Uploading file:', remotePath);
 
-		if (!this.skipFolderChecks()) {
-			await this.ensureParentFolder(remotePath);
-		}
+		await this.ensureParentFolder(remotePath);
 
 		return this.client.uploadFile(remotePath, content, modifiedMs);
 	}
@@ -62,9 +79,7 @@ export class FileOperations {
 	 */
 	async moveFile(fromPath: string, toPath: string): Promise<void> {
 		logger.debug('Moving file:', fromPath, 'to', toPath);
-		if (!this.skipFolderChecks()) {
-			await this.ensureParentFolder(toPath);
-		}
+		await this.ensureParentFolder(toPath);
 		await this.client.moveItem(fromPath, toPath);
 	}
 
@@ -111,9 +126,19 @@ export class FileOperations {
 	}
 
 	/**
-	 * Ensure a single remote folder exists, sharing in-flight checks/creates across parallel uploads.
+	 * Ensure a single remote folder exists, sharing in-flight checks/creates
+	 * across parallel uploads. Skips the network entirely when the folder
+	 * is already in knownFolders (the common case — most folders a sync
+	 * touches already existed in the snapshot fetched at the start of it).
+	 * Otherwise attempts to create it directly; koofrClient.createFolder
+	 * already treats "already exists" as success, so no separate existence
+	 * check is needed before creating.
 	 */
 	private async ensureFolderExists(folderPath: string): Promise<void> {
+		if (this.knownFolders.has(folderPath)) {
+			return;
+		}
+
 		const pendingEnsure = this.pendingFolderEnsures.get(folderPath);
 		if (pendingEnsure) {
 			await pendingEnsure;
@@ -121,18 +146,16 @@ export class FileOperations {
 		}
 
 		const ensurePromise = (async () => {
-			const exists = await this.client.itemExists(folderPath);
-			if (exists) {
-				return;
-			}
-
 			try {
 				await this.client.createFolder(folderPath);
 			} catch (error) {
+				// Defensive fallback in case createFolder threw for a reason
+				// its "already exists" message match didn't catch.
 				if (!(await this.client.itemExists(folderPath))) {
 					throw error;
 				}
 			}
+			this.knownFolders.add(folderPath);
 		})();
 
 		this.pendingFolderEnsures.set(folderPath, ensurePromise);

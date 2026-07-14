@@ -165,8 +165,6 @@ export interface SyncEngineOptions {
 	pluginVersion?: string;
 	/** Max concurrent upload/download operations */
 	maxConcurrentOperations?: number;
-	/** Use atomic move API instead of delete+upload */
-	useAtomicMoves?: boolean;
 	/** Returns true if pull-only mode is enabled */
 	isPullOnlyMode?: () => boolean;
 }
@@ -217,21 +215,12 @@ export interface PersistedConflictQueue {
 
 /** Experimental settings — performance tuning and unstable features */
 export interface ExperimentalSettings {
-	/**
-	 * Skip folder existence checks before uploads. Unlike OneDrive, it's not
-	 * confirmed whether Koofr auto-creates parent folders on upload — default
-	 * OFF (checks run) until verified against a real account.
-	 */
-	skipFolderChecks: boolean;
 	maxConcurrentOperations: number; // Max parallel sync operations (uploads/downloads)
-	useAtomicMoves: boolean; // Use Koofr's move API instead of delete+upload
 	pullOnlyMode: boolean; // Pull-only sync: download remote changes but never upload local changes
 }
 
 export const DEFAULT_EXPERIMENTAL_SETTINGS: ExperimentalSettings = {
-	skipFolderChecks: false, // Default OFF — Koofr's auto-create behavior on upload is unconfirmed
 	maxConcurrentOperations: 4, // Conservative default
-	useAtomicMoves: true, // Default ON — atomic moves are more efficient and avoid duplicates
 	pullOnlyMode: false, // Default OFF — bidirectional sync is the normal behavior
 };
 

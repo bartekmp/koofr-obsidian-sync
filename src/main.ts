@@ -247,15 +247,16 @@ export default class KoofrSyncPlugin extends Plugin {
 		logger.info('Initializing authenticated components');
 
 		try {
-			this.authProvider = new KoofrAuthProvider(this.credentialStorage, this.authClient, async () => {
-				new Notice(t('notices.auth.expired'));
-			});
+			this.authProvider = new KoofrAuthProvider(
+				this.credentialStorage,
+				this.authClient,
+				async () => {
+					new Notice(t('notices.auth.expired'));
+				}
+			);
 
 			this.koofrClient = new KoofrClient(this.authProvider, this.settings.mountId);
-			this.fileOps = new FileOperations(
-				this.koofrClient,
-				() => this.getExperimentalSetting('skipFolderChecks')
-			);
+			this.fileOps = new FileOperations(this.koofrClient);
 
 			this.eventManager = new EventManager(
 				this.app,
@@ -310,7 +311,6 @@ export default class KoofrSyncPlugin extends Plugin {
 					onProgress: (msg) => this.setSyncProgress(msg),
 					pluginVersion: this.manifest.version,
 					maxConcurrentOperations: this.getExperimentalSetting('maxConcurrentOperations'),
-					useAtomicMoves: this.getExperimentalSetting('useAtomicMoves'),
 					isPullOnlyMode: () => this.getExperimentalSetting('pullOnlyMode'),
 				}
 			);

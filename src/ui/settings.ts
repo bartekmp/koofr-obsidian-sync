@@ -60,7 +60,6 @@ export class KoofrSettingTab extends PluginSettingTab {
 		this.displaySyncSection(containerEl);
 		this.displayAdvancedSection(containerEl);
 		this.displayExperimentalSection(containerEl);
-		this.displayCreditsSection(containerEl);
 	}
 
 	/**
@@ -71,7 +70,9 @@ export class KoofrSettingTab extends PluginSettingTab {
 
 		const isConnected = !!this.plugin.settings.connectedEmail;
 
-		const statusSetting = new Setting(containerEl).setName(t('settings.auth.connectionStatus.name'));
+		const statusSetting = new Setting(containerEl).setName(
+			t('settings.auth.connectionStatus.name')
+		);
 
 		if (isConnected) {
 			statusSetting.setDesc(
@@ -90,7 +91,9 @@ export class KoofrSettingTab extends PluginSettingTab {
 
 		statusSetting.setDesc(t('settings.auth.connectionStatus.notConnected'));
 
-		const helpDiv = containerEl.createDiv({ cls: 'setting-item-description koofr-sync-settings-help' });
+		const helpDiv = containerEl.createDiv({
+			cls: 'setting-item-description koofr-sync-settings-help',
+		});
 		helpDiv.appendText(t('settings.auth.appPasswordHelpPrefix'));
 		helpDiv.createEl('a', {
 			text: t('settings.auth.appPasswordHelpLink'),
@@ -99,28 +102,24 @@ export class KoofrSettingTab extends PluginSettingTab {
 		});
 		helpDiv.appendText(t('settings.auth.appPasswordHelpSuffix'));
 
-		new Setting(containerEl)
-			.setName(t('settings.auth.email.name'))
-			.addText((text) =>
-				text
-					.setPlaceholder(t('settings.auth.email.placeholder'))
-					.setValue(this.pendingEmail)
-					.onChange((value) => {
-						this.pendingEmail = value.trim();
-					})
-			);
+		new Setting(containerEl).setName(t('settings.auth.email.name')).addText((text) =>
+			text
+				.setPlaceholder(t('settings.auth.email.placeholder'))
+				.setValue(this.pendingEmail)
+				.onChange((value) => {
+					this.pendingEmail = value.trim();
+				})
+		);
 
-		new Setting(containerEl)
-			.setName(t('settings.auth.appPassword.name'))
-			.addText((text) => {
-				text.inputEl.type = 'password';
-				text
-					.setPlaceholder(t('settings.auth.appPassword.placeholder'))
-					.setValue(this.pendingAppPassword)
-					.onChange((value) => {
-						this.pendingAppPassword = value;
-					});
-			});
+		new Setting(containerEl).setName(t('settings.auth.appPassword.name')).addText((text) => {
+			text.inputEl.type = 'password';
+			text
+				.setPlaceholder(t('settings.auth.appPassword.placeholder'))
+				.setValue(this.pendingAppPassword)
+				.onChange((value) => {
+					this.pendingAppPassword = value;
+				});
+		});
 
 		new Setting(containerEl).addButton((button) =>
 			button
@@ -459,23 +458,6 @@ export class KoofrSettingTab extends PluginSettingTab {
 
 		new Setting(detailsEl).setDesc(t('settings.experimental.description'));
 
-		// Skip folder existence checks
-		new Setting(detailsEl)
-			.setName(t('settings.experimental.skipFolderChecks.name'))
-			.setDesc(t('settings.experimental.skipFolderChecks.desc'))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.getExperimentalSetting('skipFolderChecks'))
-					.onChange(async (value) => {
-						this.plugin.settings.experimental = {
-							...DEFAULT_EXPERIMENTAL_SETTINGS,
-							...this.plugin.settings.experimental,
-							skipFolderChecks: value,
-						};
-						await this.plugin.saveSettings();
-					})
-			);
-
 		// Max concurrent operations
 		new Setting(detailsEl)
 			.setName(t('settings.experimental.maxConcurrentOperations.name'))
@@ -491,23 +473,6 @@ export class KoofrSettingTab extends PluginSettingTab {
 							...DEFAULT_EXPERIMENTAL_SETTINGS,
 							...this.plugin.settings.experimental,
 							maxConcurrentOperations: parsed,
-						};
-						await this.plugin.saveSettings();
-					})
-			);
-
-		// Use atomic moves
-		new Setting(detailsEl)
-			.setName(t('settings.experimental.useAtomicMoves.name'))
-			.setDesc(t('settings.experimental.useAtomicMoves.desc'))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.getExperimentalSetting('useAtomicMoves'))
-					.onChange(async (value) => {
-						this.plugin.settings.experimental = {
-							...DEFAULT_EXPERIMENTAL_SETTINGS,
-							...this.plugin.settings.experimental,
-							useAtomicMoves: value,
 						};
 						await this.plugin.saveSettings();
 					})
@@ -529,20 +494,5 @@ export class KoofrSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
-	}
-
-	/**
-	 * Attribution footer — this plugin's sync engine, conflict resolution
-	 * model, and settings UI patterns are adapted from obsidian-onedrive.
-	 */
-	private displayCreditsSection(containerEl: HTMLElement): void {
-		const creditsDiv = containerEl.createDiv({ cls: 'setting-item-description koofr-sync-credits' });
-		creditsDiv.appendText(t('settings.credits.prefix'));
-		creditsDiv.createEl('a', {
-			text: t('settings.credits.linkText'),
-			href: 'https://github.com/jeffsteinbok/obsidian-onedrive',
-			attr: { target: '_blank' },
-		});
-		creditsDiv.appendText(t('settings.credits.suffix'));
 	}
 }

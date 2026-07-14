@@ -175,8 +175,12 @@ describe('pathUtils', () => {
 		});
 
 		it('should exclude .obsidian files by default', () => {
-			expect(shouldSyncVaultPath('.obsidian/workspace.json', false, false, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/plugins/calendar/manifest.json', false, false, '.obsidian')).toBe(false);
+			expect(shouldSyncVaultPath('.obsidian/workspace.json', false, false, '.obsidian')).toBe(
+				false
+			);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/calendar/manifest.json', false, false, '.obsidian')
+			).toBe(false);
 		});
 
 		it('respects a custom vault config directory', () => {
@@ -196,74 +200,133 @@ describe('pathUtils', () => {
 
 		it('should exclude non-allowlisted .obsidian files even when syncAppSettings is enabled', () => {
 			expect(shouldSyncVaultPath('.obsidian/workspace.json', false, true, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/plugins/calendar/data.json', false, true, '.obsidian')).toBe(false);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/calendar/data.json', false, true, '.obsidian')
+			).toBe(false);
 		});
 
 		it('should allow selected plugin manifest files when syncPluginManifests is opted in', () => {
-			expect(shouldSyncVaultPath('.obsidian/community-plugins.json', true, false, '.obsidian')).toBe(true);
-			expect(shouldSyncVaultPath('.obsidian/core-plugins.json', true, false, '.obsidian')).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/community-plugins.json', true, false, '.obsidian')
+			).toBe(true);
+			expect(shouldSyncVaultPath('.obsidian/core-plugins.json', true, false, '.obsidian')).toBe(
+				true
+			);
 		});
 
 		it('should sync plugin binaries when syncPluginManifests is opted in', () => {
-			expect(shouldSyncVaultPath('.obsidian/plugins/calendar/manifest.json', true, false, '.obsidian')).toBe(true);
-			expect(shouldSyncVaultPath('.obsidian/plugins/calendar/main.js', true, false, '.obsidian')).toBe(true);
-			expect(shouldSyncVaultPath('.obsidian/plugins/calendar/styles.css', true, false, '.obsidian')).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/calendar/manifest.json', true, false, '.obsidian')
+			).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/calendar/main.js', true, false, '.obsidian')
+			).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/calendar/styles.css', true, false, '.obsidian')
+			).toBe(true);
 		});
 
 		it('should exclude plugin data files when syncPluginManifests is opted in', () => {
-			expect(shouldSyncVaultPath('.obsidian/plugins/calendar/data.json', true, false, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/plugins/calendar/subdir/manifest.json', true, false, '.obsidian')).toBe(
-				false
-			);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/calendar/data.json', true, false, '.obsidian')
+			).toBe(false);
+			expect(
+				shouldSyncVaultPath(
+					'.obsidian/plugins/calendar/subdir/manifest.json',
+					true,
+					false,
+					'.obsidian'
+				)
+			).toBe(false);
 		});
 
 		it('should sync app settings and plugin files simultaneously when both are enabled', () => {
 			expect(shouldSyncVaultPath('.obsidian/app.json', true, true, '.obsidian')).toBe(true);
-			expect(shouldSyncVaultPath('.obsidian/plugins/calendar/main.js', true, true, '.obsidian')).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/calendar/main.js', true, true, '.obsidian')
+			).toBe(true);
 			expect(shouldSyncVaultPath('.obsidian/workspace.json', true, true, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/plugins/calendar/data.json', true, true, '.obsidian')).toBe(false);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/calendar/data.json', true, true, '.obsidian')
+			).toBe(false);
 		});
 
 		it('always excludes the per-device debug log folder from sync', () => {
 			expect(shouldSyncVaultPath('_KoofrSyncLogs', false, false, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('_KoofrSyncLogs/2026-06-04.md', false, false, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('_KoofrSyncLogs/sub/dir/note.md', true, true, '.obsidian')).toBe(false);
+			expect(shouldSyncVaultPath('_KoofrSyncLogs/2026-06-04.md', false, false, '.obsidian')).toBe(
+				false
+			);
+			expect(shouldSyncVaultPath('_KoofrSyncLogs/sub/dir/note.md', true, true, '.obsidian')).toBe(
+				false
+			);
 			// Files that just look similar should still sync — exclusion is
 			// folder-scoped, not name-scoped, so moving a log out of the folder
 			// makes it syncable again.
-			expect(shouldSyncVaultPath('_KoofrSyncLogs-2026-06-04.md', false, false, '.obsidian')).toBe(true);
-			expect(shouldSyncVaultPath('_KoofrSyncLogsBackup/foo.md', false, false, '.obsidian')).toBe(true);
-			expect(shouldSyncVaultPath('notes/_KoofrSyncLogs/x.md', false, false, '.obsidian')).toBe(true);
+			expect(shouldSyncVaultPath('_KoofrSyncLogs-2026-06-04.md', false, false, '.obsidian')).toBe(
+				true
+			);
+			expect(shouldSyncVaultPath('_KoofrSyncLogsBackup/foo.md', false, false, '.obsidian')).toBe(
+				true
+			);
+			expect(shouldSyncVaultPath('notes/_KoofrSyncLogs/x.md', false, false, '.obsidian')).toBe(
+				true
+			);
 		});
 
 		it("never syncs the Koofr plugin's own folder, even with plugin sync enabled", () => {
-			expect(shouldSyncVaultPath('.obsidian/plugins/koofr-sync', false, false, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/plugins/koofr-sync/main.js', true, true, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/plugins/koofr-sync/manifest.json', true, true, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/plugins/koofr-sync/data.json', true, true, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/plugins/koofr-sync/styles.css', true, true, '.obsidian')).toBe(false);
+			expect(shouldSyncVaultPath('.obsidian/plugins/koofr-sync', false, false, '.obsidian')).toBe(
+				false
+			);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/koofr-sync/main.js', true, true, '.obsidian')
+			).toBe(false);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/koofr-sync/manifest.json', true, true, '.obsidian')
+			).toBe(false);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/koofr-sync/data.json', true, true, '.obsidian')
+			).toBe(false);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/koofr-sync/styles.css', true, true, '.obsidian')
+			).toBe(false);
 			// Other plugins are unaffected.
-			expect(shouldSyncVaultPath('.obsidian/plugins/calendar/main.js', true, false, '.obsidian')).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/plugins/calendar/main.js', true, false, '.obsidian')
+			).toBe(true);
 		});
 
 		it('never syncs Obsidian per-device workspace state files', () => {
 			expect(shouldSyncVaultPath('.obsidian/workspace.json', true, true, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/workspace-mobile.json', true, true, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/workspace-JEFFSTEISL7.json', true, true, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/workspace-JEFFOFFICE3-6.json', true, true, '.obsidian')).toBe(false);
+			expect(shouldSyncVaultPath('.obsidian/workspace-mobile.json', true, true, '.obsidian')).toBe(
+				false
+			);
+			expect(
+				shouldSyncVaultPath('.obsidian/workspace-JEFFSTEISL7.json', true, true, '.obsidian')
+			).toBe(false);
+			expect(
+				shouldSyncVaultPath('.obsidian/workspace-JEFFOFFICE3-6.json', true, true, '.obsidian')
+			).toBe(false);
 			// Other .obsidian files still follow the normal rules.
 			expect(shouldSyncVaultPath('.obsidian/app.json', false, true, '.obsidian')).toBe(true);
 		});
 
 		it('should NOT sync CSS snippets when syncCssSnippets is disabled (default)', () => {
-			expect(shouldSyncVaultPath('.obsidian/snippets/my-style.css', false, false, '.obsidian')).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/snippets/another.css', false, false, '.obsidian')).toBe(false);
+			expect(
+				shouldSyncVaultPath('.obsidian/snippets/my-style.css', false, false, '.obsidian')
+			).toBe(false);
+			expect(shouldSyncVaultPath('.obsidian/snippets/another.css', false, false, '.obsidian')).toBe(
+				false
+			);
 			expect(shouldSyncVaultPath('.obsidian/snippets', false, false, '.obsidian')).toBe(false);
 		});
 
 		it('should sync CSS snippet files when syncCssSnippets is enabled', () => {
-			expect(shouldSyncVaultPath('.obsidian/snippets/my-style.css', false, false, '.obsidian', true)).toBe(true);
-			expect(shouldSyncVaultPath('.obsidian/snippets/another.css', false, false, '.obsidian', true)).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/snippets/my-style.css', false, false, '.obsidian', true)
+			).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/snippets/another.css', false, false, '.obsidian', true)
+			).toBe(true);
 		});
 
 		it('should sync snippets folder itself when syncCssSnippets is enabled', () => {
@@ -271,23 +334,39 @@ describe('pathUtils', () => {
 		});
 
 		it('should NOT sync non-css files in snippets folder', () => {
-			expect(shouldSyncVaultPath('.obsidian/snippets/note.md', false, false, '.obsidian', true)).toBe(false);
-			expect(shouldSyncVaultPath('.obsidian/snippets/style.json', false, false, '.obsidian', true)).toBe(false);
+			expect(
+				shouldSyncVaultPath('.obsidian/snippets/note.md', false, false, '.obsidian', true)
+			).toBe(false);
+			expect(
+				shouldSyncVaultPath('.obsidian/snippets/style.json', false, false, '.obsidian', true)
+			).toBe(false);
 		});
 
 		it('should NOT sync files in subdirectories of snippets folder', () => {
-			expect(shouldSyncVaultPath('.obsidian/snippets/sub/style.css', false, false, '.obsidian', true)).toBe(false);
+			expect(
+				shouldSyncVaultPath('.obsidian/snippets/sub/style.css', false, false, '.obsidian', true)
+			).toBe(false);
 		});
 
 		it('should sync CSS snippets independently of app settings and plugin manifests', () => {
-			expect(shouldSyncVaultPath('.obsidian/snippets/my-style.css', true, true, '.obsidian', true)).toBe(true);
-			expect(shouldSyncVaultPath('.obsidian/snippets/my-style.css', false, false, '.obsidian', true)).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/snippets/my-style.css', true, true, '.obsidian', true)
+			).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/snippets/my-style.css', false, false, '.obsidian', true)
+			).toBe(true);
 		});
 
 		it('should work with custom configDir for snippets', () => {
-			expect(shouldSyncVaultPath('.config/snippets/my-style.css', false, false, '.config', true)).toBe(true);
-			expect(shouldSyncVaultPath('.obsidian/snippets/my-style.css', false, false, '.config', true)).toBe(true);
-			expect(shouldSyncVaultPath('.obsidian/snippets/my-style.css', false, false, '.config', false)).toBe(true);
+			expect(
+				shouldSyncVaultPath('.config/snippets/my-style.css', false, false, '.config', true)
+			).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/snippets/my-style.css', false, false, '.config', true)
+			).toBe(true);
+			expect(
+				shouldSyncVaultPath('.obsidian/snippets/my-style.css', false, false, '.config', false)
+			).toBe(true);
 		});
 	});
 });

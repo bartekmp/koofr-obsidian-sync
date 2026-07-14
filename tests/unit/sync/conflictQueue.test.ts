@@ -21,7 +21,12 @@ describe('ConflictQueue', () => {
 			vi.fn().mockResolvedValue(undefined),
 			stateManager
 		);
-		queue = new ConflictQueue(mockApp as never, stateManager, eventManager, mockApp.vault.configDir);
+		queue = new ConflictQueue(
+			mockApp as never,
+			stateManager,
+			eventManager,
+			mockApp.vault.configDir
+		);
 
 		mockApp.vault.adapter.exists.mockResolvedValue(false);
 		mockApp.vault.adapter.writeBinary.mockResolvedValue(undefined);
@@ -35,7 +40,14 @@ describe('ConflictQueue', () => {
 			const localContent = new TextEncoder().encode('local content').buffer;
 			const remoteContent = new TextEncoder().encode('remote content').buffer;
 
-			const entry = await queue.add('notes/test.md', localContent, remoteContent, 1000, 2000, 'hash-1');
+			const entry = await queue.add(
+				'notes/test.md',
+				localContent,
+				remoteContent,
+				1000,
+				2000,
+				'hash-1'
+			);
 
 			expect(entry.path).toBe('notes/test.md');
 			expect(entry.localModifiedTime).toBe(1000);
@@ -177,7 +189,12 @@ describe('ConflictQueue', () => {
 			const saved = queue.prepareForSave();
 			expect(saved.entries).toHaveLength(2);
 
-			const newQueue = new ConflictQueue(mockApp as never, stateManager, eventManager, mockApp.vault.configDir);
+			const newQueue = new ConflictQueue(
+				mockApp as never,
+				stateManager,
+				eventManager,
+				mockApp.vault.configDir
+			);
 			newQueue.load(saved);
 
 			expect(newQueue.count).toBe(2);

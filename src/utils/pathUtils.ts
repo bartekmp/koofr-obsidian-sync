@@ -108,7 +108,9 @@ export function toVaultPath(remotePath: string, remoteRoot: string): string {
 	const normalized = normalizePath(remotePath);
 	const rootNormalized = normalizePath(remoteRoot);
 	const rootWithSlash = rootNormalized
-		? (rootNormalized.startsWith('/') ? rootNormalized : `/${rootNormalized}`)
+		? rootNormalized.startsWith('/')
+			? rootNormalized
+			: `/${rootNormalized}`
 		: '';
 
 	if (rootWithSlash && normalized.startsWith(rootWithSlash)) {
@@ -244,12 +246,8 @@ export async function getAllSyncableConfigPaths(
 	const syncSnippets = shouldSyncPath(`${configDir}/snippets`);
 
 	const fixedPaths = getFixedSyncableConfigPaths(configDir, syncPlugins, syncAppSettings);
-	const pluginPaths = syncPlugins
-		? await getInstalledPluginSyncPaths(configDir, adapter)
-		: [];
-	const snippetPaths = syncSnippets
-		? await getInstalledSnippetSyncPaths(configDir, adapter)
-		: [];
+	const pluginPaths = syncPlugins ? await getInstalledPluginSyncPaths(configDir, adapter) : [];
+	const snippetPaths = syncSnippets ? await getInstalledSnippetSyncPaths(configDir, adapter) : [];
 
 	return [...fixedPaths, ...pluginPaths, ...snippetPaths];
 }

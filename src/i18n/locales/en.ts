@@ -63,8 +63,10 @@ export const en = {
 			alreadyInProgress: 'Sync already in progress',
 			failed: 'Sync failed: {{message}}',
 			folderSet: 'Sync folder set to: {{mount}}{{path}}',
-			reset: 'Sync reset. Tracked file states cleared. Next sync will re-read from Koofr and reconcile local files.',
-			disabledAfterLargeDelete: 'Koofr sync: disabled. Investigate the deletes, then re-enable the plugin.',
+			reset:
+				'Sync reset. Tracked file states cleared. Next sync will re-read from Koofr and reconcile local files.',
+			disabledAfterLargeDelete:
+				'Koofr sync: disabled. Investigate the deletes, then re-enable the plugin.',
 			cancelledAfterLargeDelete: 'Koofr sync: cancelled. The pending deletes were not applied.',
 			noFilesToSync: 'Koofr sync: No files to sync. Edit or create files first.',
 			deviceTypeSyncHint:
@@ -102,7 +104,8 @@ export const en = {
 		changeMount: 'Change mount',
 		selectCurrent: 'Select "/{{path}}"',
 		selectRoot: 'Select the entire {{label}} (root)',
-		selectDestinationDesc: 'Your vault files will sync directly into this folder — nothing extra is created under it.',
+		selectDestinationDesc:
+			'Your vault files will sync directly into this folder — nothing extra is created under it.',
 		useThisFolder: 'Use this folder',
 		loading: 'Loading folders...',
 		noSubfolders: 'No subfolders',
@@ -148,7 +151,8 @@ export const en = {
 		summaryFiles:
 			'This sync would delete {{total}} files (threshold: {{threshold}}). Review before continuing — this could indicate an unintended remote change or an accidental local delete.',
 		localDeletesFile: '{{count}} file would be removed from this vault (driven by remote changes)',
-		localDeletesFiles: '{{count}} files would be removed from this vault (driven by remote changes)',
+		localDeletesFiles:
+			'{{count}} files would be removed from this vault (driven by remote changes)',
 		remoteDeletesFile: '{{count}} file would be removed from Koofr (driven by local deletes)',
 		remoteDeletesFiles: '{{count}} files would be removed from Koofr (driven by local deletes)',
 		hint: 'If you cancel or disable, nothing has been deleted yet — the same plan will be re-checked next sync.',
@@ -186,7 +190,8 @@ export const en = {
 		},
 		syncFolder: {
 			heading: 'Sync Folder',
-			explainer: 'The folder you pick below is the exact sync destination — your vault files sync directly into it. Nothing is auto-created underneath it.',
+			explainer:
+				'The folder you pick below is the exact sync destination — your vault files sync directly into it. Nothing is auto-created underneath it.',
 			remoteFolder: 'Remote folder',
 			notSelected: '(not selected)',
 			currentSelection: '{{mount}}{{path}}',
@@ -277,29 +282,17 @@ export const en = {
 		},
 		experimental: {
 			heading: 'Experimental',
-			description: 'These settings may improve performance but are not fully tested. Use at your own risk.',
-			skipFolderChecks: {
-				name: 'Skip folder existence checks',
-				desc: "Skip API calls to verify folders exist before uploading. It's not confirmed whether Koofr auto-creates missing parent folders on upload — leave this off unless you've verified it works for your account.",
-			},
+			description:
+				'These settings may improve performance but are not fully tested. Use at your own risk.',
 			maxConcurrentOperations: {
 				name: 'Max concurrent operations',
 				desc: 'Maximum number of parallel upload/download operations. Higher values may speed up large syncs but could hit rate limits.',
 				placeholder: '4',
 			},
-			useAtomicMoves: {
-				name: 'Use atomic moves',
-				desc: "Use Koofr's native move API for file renames/moves instead of delete + re-upload. More efficient and avoids duplicate files if sync state is lost.",
-			},
 			pullOnlyMode: {
 				name: 'Pull-only mode (read-only sync)',
 				desc: 'Only download remote changes from Koofr. Local edits will not be uploaded. Useful for read-only vaults or backup recovery. When disabled, local changes will sync on the next cycle.',
 			},
-		},
-		credits: {
-			prefix: 'Koofr Sync is inspired by ',
-			linkText: 'obsidian-onedrive',
-			suffix: ' by Jeff Steinbok — this plugin adapts its sync engine and UI design for Koofr.',
 		},
 	},
 } as const;

@@ -133,8 +133,6 @@ interface SyncExecutionResult {
 export class SyncEngine {
 	// Concurrent operations limit — overridable via experimental settings.
 	private readonly maxConcurrentOperations: number;
-	// Use atomic move API instead of delete+upload — more efficient and avoids duplicates.
-	private readonly useAtomicMoves: boolean;
 	private static readonly DEFAULT_IGNORE_PATTERNS: string[] = [];
 	private pendingVaultFolderCreates = new Map<string, Promise<void>>();
 
@@ -159,13 +157,13 @@ export class SyncEngine {
 	) {
 		this.remoteRoot = options.remoteRoot ?? '';
 		this.conflictQueue = options.conflictQueue;
-		this.shouldSyncPath = options.shouldSyncPath ?? ((path) => shouldSyncVaultPath(path, false, false, configDir));
+		this.shouldSyncPath =
+			options.shouldSyncPath ?? ((path) => shouldSyncVaultPath(path, false, false, configDir));
 		this.getLargeDeleteThreshold = options.getLargeDeleteThreshold ?? (() => 0);
 		this.largeDeleteWarningHandler = options.largeDeleteWarningHandler;
 		this.onProgress = options.onProgress;
 		this.pluginVersion = options.pluginVersion ?? 'unknown';
 		this.maxConcurrentOperations = options.maxConcurrentOperations ?? 4;
-		this.useAtomicMoves = options.useAtomicMoves ?? true;
 		this.isPullOnlyMode = options.isPullOnlyMode ?? (() => false);
 	}
 
@@ -203,6 +201,11 @@ export class SyncEngine {
 				progress
 			);
 
+			// Seed FileOperations' known-folder cache from this snapshot so
+			// uploads this sync skip a live existence check for any folder
+			// we already know is there.
+			this.fileOps.seedKnownFolders(this.knownRemoteFolderPaths(remoteFolderVaultPaths));
+
 			// Reconcile the tracked folder-path set with what the snapshot shows
 			// exists remotely right now — folders gone from the snapshot are
 			// deletes; new ones are simply recorded.
@@ -236,7 +239,11 @@ export class SyncEngine {
 				}
 			}
 
-			if (operations.length === 0 && folderChanges.length === 0 && deletedFolderPaths.length === 0) {
+			if (
+				operations.length === 0 &&
+				folderChanges.length === 0 &&
+				deletedFolderPaths.length === 0
+			) {
 				if (isFirstSync && localChanges.length === 0 && remoteFiles.size === 0) {
 					logger.info('First sync with no local files and empty remote — nothing to do.');
 					new Notice(t('notices.sync.noFilesToSync'));
@@ -357,10 +364,15 @@ export class SyncEngine {
 			`Local changes: ${localChanges.length} dirty files (${configChanges.length} config), ${folderChanges.length} folder operations`
 		);
 
-		const discoveredFolderCreates = this.discoverUntrackedLocalFolders(ignoreMatchers, folderChanges);
+		const discoveredFolderCreates = this.discoverUntrackedLocalFolders(
+			ignoreMatchers,
+			folderChanges
+		);
 		if (discoveredFolderCreates.length > 0) {
 			folderChanges.push(...discoveredFolderCreates);
-			logger.info(`Local folder discovery: queued ${discoveredFolderCreates.length} untracked folder creates`);
+			logger.info(
+				`Local folder discovery: queued ${discoveredFolderCreates.length} untracked folder creates`
+			);
 		}
 
 		return { localChanges, folderChanges, ignoredCount: ignoredLocalPaths.length };
@@ -412,10 +424,8 @@ export class SyncEngine {
 		const adapter = this.app.vault.adapter;
 		const changes: LocalChange[] = [];
 
-		const allConfigPaths = await getAllSyncableConfigPaths(
-			this.configDir,
-			adapter,
-			(path) => this.shouldSyncPath(path)
+		const allConfigPaths = await getAllSyncableConfigPaths(this.configDir, adapter, (path) =>
+			this.shouldSyncPath(path)
 		);
 
 		const checkedPaths = new Set<string>();
@@ -648,31 +658,25 @@ export class SyncEngine {
 				handledRemotePaths.add(change.path);
 				handledRemotePaths.add(change.oldPath);
 
-				if (this.useAtomicMoves && oldState) {
+				if (oldState) {
+					// Always move atomically — Koofr's move API is a single
+					// request and is strictly cheaper than delete+re-upload,
+					// so there's no reason to fall back to that path.
 					operations.push({
 						path: change.path,
 						direction: SyncDirection.MOVE,
 						moveFromPath: this.vaultPathToRemotePath(change.oldPath),
 						remoteState: oldState,
 					});
-					this.stateManager.removeFileState(change.oldPath);
-					continue;
-				}
-
-				// Fallback: delete old (if tracked) + upload new
-				if (oldState) {
-					operations.push({
-						path: change.oldPath,
-						direction: SyncDirection.UPLOAD,
-						localState: undefined,
-						remoteState: oldState,
-					});
 				} else {
+					// No tracked state for the old path — we don't know its
+					// remote location, so there's nothing to move. Just
+					// upload the file at its new path.
 					logger.warn(
-						`Rename: no tracked state for old path ${change.oldPath} — cannot delete from Koofr.`
+						`Rename: no tracked state for old path ${change.oldPath} — cannot move on Koofr, uploading fresh.`
 					);
+					operations.push({ path: change.path, direction: SyncDirection.UPLOAD });
 				}
-				operations.push({ path: change.path, direction: SyncDirection.UPLOAD });
 				this.stateManager.removeFileState(change.oldPath);
 				continue;
 			}
@@ -914,7 +918,9 @@ export class SyncEngine {
 			localMtime = stat?.mtime ?? Date.now();
 		}
 
-		const remoteContent = await this.fileOps.downloadFile(this.vaultPathToRemotePath(operation.path));
+		const remoteContent = await this.fileOps.downloadFile(
+			this.vaultPathToRemotePath(operation.path)
+		);
 
 		await this.conflictQueue.add(
 			operation.path,
@@ -947,7 +953,10 @@ export class SyncEngine {
 						await this.fileOps.deleteFile(this.vaultPathToRemotePath(operation.path));
 						logger.debug(`Deleted remote ${operation.path} (vanished locally)`);
 					} catch (deleteError) {
-						logger.warn(`Could not delete remote ${operation.path} after local vanish:`, deleteError);
+						logger.warn(
+							`Could not delete remote ${operation.path} after local vanish:`,
+							deleteError
+						);
 					}
 				}
 				this.stateManager.removeFileState(operation.path);
@@ -1097,7 +1106,9 @@ export class SyncEngine {
 			const folder = this.app.vault.getAbstractFileByPath(path);
 			if (folder && folder instanceof TFolder) {
 				if (folder.children.length > 0) {
-					logger.debug(`Skipping cloud-deleted folder ${path} — still has ${folder.children.length} local children`);
+					logger.debug(
+						`Skipping cloud-deleted folder ${path} — still has ${folder.children.length} local children`
+					);
 					continue;
 				}
 				try {
@@ -1112,7 +1123,9 @@ export class SyncEngine {
 					if (await adapter.exists(path)) {
 						const listing = await adapter.list(path);
 						if (listing.files.length > 0 || listing.folders.length > 0) {
-							logger.debug(`Skipping cloud-deleted config folder ${path} — still has local children`);
+							logger.debug(
+								`Skipping cloud-deleted config folder ${path} — still has local children`
+							);
 							continue;
 						}
 						await adapter.rmdir(path, false);
@@ -1143,7 +1156,9 @@ export class SyncEngine {
 
 		if (candidateFolders.size === 0) return;
 
-		const sorted = Array.from(candidateFolders).sort((a, b) => b.split('/').length - a.split('/').length);
+		const sorted = Array.from(candidateFolders).sort(
+			(a, b) => b.split('/').length - a.split('/').length
+		);
 
 		const adapter = this.app.vault.adapter;
 		for (const folderPath of sorted) {
@@ -1176,7 +1191,9 @@ export class SyncEngine {
 		const deletes = folderChanges
 			.filter((c) => c.type === LocalChangeType.FOLDER_DELETE)
 			.sort((a, b) => b.path.split('/').length - a.path.split('/').length);
-		const renames = folderChanges.filter((c) => c.type === LocalChangeType.FOLDER_RENAME && c.oldPath);
+		const renames = folderChanges.filter(
+			(c) => c.type === LocalChangeType.FOLDER_RENAME && c.oldPath
+		);
 
 		for (const change of renames) {
 			const oldPath = change.oldPath!;
@@ -1218,7 +1235,9 @@ export class SyncEngine {
 				this.stateManager.removeFolderPath(change.path);
 				logger.info(`Deleted remote folder: ${change.path}`);
 			} catch (error) {
-				logger.debug(`Could not delete remote folder ${change.path}: ${error instanceof Error ? error.message : error}`);
+				logger.debug(
+					`Could not delete remote folder ${change.path}: ${error instanceof Error ? error.message : error}`
+				);
 			}
 		}
 	}
@@ -1239,7 +1258,9 @@ export class SyncEngine {
 			logger.debug(`Updated file state path: ${path} → ${newPath}`);
 		}
 
-		const childFolders = this.stateManager.getAllFolderPaths().filter((p) => p.startsWith(oldPrefix));
+		const childFolders = this.stateManager
+			.getAllFolderPaths()
+			.filter((p) => p.startsWith(oldPrefix));
 		for (const oldChildPath of childFolders) {
 			const newChildPath = newPrefix + oldChildPath.slice(oldPrefix.length);
 			this.stateManager.removeFolderPath(oldChildPath);
@@ -1260,6 +1281,23 @@ export class SyncEngine {
 	 */
 	private remotePathToVaultPath(remotePath: string): string {
 		return toVaultPath(remotePath, this.remoteRoot);
+	}
+
+	/**
+	 * Compute the remote-path form of every folder known to exist right
+	 * now (the configured sync root itself, plus everything the fresh
+	 * snapshot reported) for FileOperations.seedKnownFolders. The sync
+	 * root needs including explicitly since getTree() excludes the root
+	 * node it was queried with — top-level uploads would otherwise
+	 * needlessly try to (re)create a folder the user already selected.
+	 */
+	private knownRemoteFolderPaths(remoteFolderVaultPaths: Set<string>): string[] {
+		const paths = Array.from(remoteFolderVaultPaths, (p) => this.vaultPathToRemotePath(p));
+		if (this.remoteRoot) {
+			const normalized = normalizePath(this.remoteRoot);
+			paths.push(normalized.startsWith('/') ? normalized : `/${normalized}`);
+		}
+		return paths;
 	}
 
 	private async loadIgnoreMatchers(): Promise<RegExp[]> {
@@ -1396,12 +1434,20 @@ export class SyncEngine {
 				const local = localByPath.get(path);
 				if (!local) {
 					remoteOnly.push(path);
-					operations.push({ path, direction: SyncDirection.DOWNLOAD, remoteState: this.itemToFileState(item) });
+					operations.push({
+						path,
+						direction: SyncDirection.DOWNLOAD,
+						remoteState: this.itemToFileState(item),
+					});
 				} else {
 					const remoteSize = item.size || 0;
 					if (local.size !== remoteSize) {
 						sizeMismatch.push(path);
-						operations.push({ path, direction: SyncDirection.DOWNLOAD, remoteState: this.itemToFileState(item) });
+						operations.push({
+							path,
+							direction: SyncDirection.DOWNLOAD,
+							remoteState: this.itemToFileState(item),
+						});
 					} else {
 						this.stateManager.setFileState(path, this.itemToFileState(item));
 					}
@@ -1414,7 +1460,9 @@ export class SyncEngine {
 
 			const threshold = this.getLargeDeleteThreshold();
 			if (threshold > 0 && localOnly.length >= threshold && this.largeDeleteWarningHandler) {
-				logger.warn(`Reconcile would delete ${localOnly.length} local files (threshold ${threshold}). Asking user.`);
+				logger.warn(
+					`Reconcile would delete ${localOnly.length} local files (threshold ${threshold}). Asking user.`
+				);
 				const decision = await this.largeDeleteWarningHandler({
 					localDeleteCount: localOnly.length,
 					remoteDeleteCount: 0,

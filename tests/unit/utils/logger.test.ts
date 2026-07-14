@@ -34,10 +34,9 @@ describe('logger', () => {
 
 		logger.setDebugMode(true);
 		logger.debug('visible', { enabled: true });
-		expect(console.debug).toHaveBeenCalledWith(
-			expect.stringContaining('[DBG] visible'),
-			{ enabled: true }
-		);
+		expect(console.debug).toHaveBeenCalledWith(expect.stringContaining('[DBG] visible'), {
+			enabled: true,
+		});
 	});
 
 	it('setLogLevel respects thresholds and LogLevel.OFF disables all logging', () => {
@@ -45,9 +44,7 @@ describe('logger', () => {
 		logger.info('hidden info');
 		logger.warn('visible warn');
 		expect(console.info).not.toHaveBeenCalled();
-		expect(console.warn).toHaveBeenCalledWith(
-			expect.stringContaining('[WRN] visible warn')
-		);
+		expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('[WRN] visible warn'));
 
 		vi.clearAllMocks();
 		logger.setLogLevel(LogLevel.OFF);
@@ -62,15 +59,9 @@ describe('logger', () => {
 		logger.warn('warn message');
 		logger.error('error message');
 
-		expect(console.info).toHaveBeenCalledWith(
-			expect.stringContaining('[INF] info message')
-		);
-		expect(console.warn).toHaveBeenCalledWith(
-			expect.stringContaining('[WRN] warn message')
-		);
-		expect(console.error).toHaveBeenCalledWith(
-			expect.stringContaining('[ERR] error message')
-		);
+		expect(console.info).toHaveBeenCalledWith(expect.stringContaining('[INF] info message'));
+		expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('[WRN] warn message'));
+		expect(console.error).toHaveBeenCalledWith(expect.stringContaining('[ERR] error message'));
 	});
 
 	it('getRecentLogs returns buffered lines, respects limits, and caps at 500 entries', () => {
@@ -109,23 +100,20 @@ describe('logger', () => {
 			safe: 'ok',
 		});
 
-		expect(console.info).toHaveBeenCalledWith(
-			expect.stringContaining('[INF] Sanitized payload'),
-			{
-				access_token: '[REDACTED]',
-				refresh_token: '[REDACTED]',
+		expect(console.info).toHaveBeenCalledWith(expect.stringContaining('[INF] Sanitized payload'), {
+			access_token: '[REDACTED]',
+			refresh_token: '[REDACTED]',
+			password: '[REDACTED]',
+			secretValue: '[REDACTED]',
+			authorizationHeader: '[REDACTED]',
+			nested: {
 				password: '[REDACTED]',
-				secretValue: '[REDACTED]',
-				authorizationHeader: '[REDACTED]',
-				nested: {
-					password: '[REDACTED]',
-					profile: {
-						access_token: '[REDACTED]',
-					},
+				profile: {
+					access_token: '[REDACTED]',
 				},
-				safe: 'ok',
-			}
-		);
+			},
+			safe: 'ok',
+		});
 
 		const recentLog = logger.getRecentLogs(1)[0];
 		expect(recentLog).toContain('[REDACTED]');
@@ -140,9 +128,7 @@ describe('logger', () => {
 
 		logger.info('formatted message');
 
-		expect(console.info).toHaveBeenCalledWith(
-			'[2024-01-02T03:04:05.000Z] [INF] formatted message'
-		);
+		expect(console.info).toHaveBeenCalledWith('[2024-01-02T03:04:05.000Z] [INF] formatted message');
 	});
 
 	it('setVaultLogHook forwards log lines to the hook and null clears it', () => {
