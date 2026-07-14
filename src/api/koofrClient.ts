@@ -314,7 +314,11 @@ export class KoofrClient {
 	 * multipart POST — no chunked/resumable upload API is documented, so
 	 * (unlike OneDrive) there's no size-based branch here.
 	 */
-	async uploadFile(remotePath: string, content: ArrayBuffer, modifiedMs?: number): Promise<KoofrFileInfo> {
+	async uploadFile(
+		remotePath: string,
+		content: ArrayBuffer,
+		modifiedMs?: number
+	): Promise<KoofrFileInfo> {
 		const mountId = this.requireMountId();
 		const normalized = this.normalizeRemotePath(remotePath);
 		const parentPath = getParentPath(normalized) || '/';

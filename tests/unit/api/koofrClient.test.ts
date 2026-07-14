@@ -49,7 +49,11 @@ describe('KoofrClient', () => {
 	describe('listMounts', () => {
 		it('parses a lowercase "mounts" key', async () => {
 			mockRequestUrl.mockResolvedValue(
-				jsonResponse(200, { mounts: [{ id: 'm1', name: 'My Koofr', type: 'device', isPrimary: true, isShared: false }] })
+				jsonResponse(200, {
+					mounts: [
+						{ id: 'm1', name: 'My Koofr', type: 'device', isPrimary: true, isShared: false },
+					],
+				})
 			);
 
 			const mounts = await client.listMounts();
@@ -62,7 +66,11 @@ describe('KoofrClient', () => {
 		});
 
 		it('falls back to a capitalized "Mounts" key', async () => {
-			mockRequestUrl.mockResolvedValue(jsonResponse(200, { Mounts: [{ id: 'm2', name: 'Shared', type: 'import', isPrimary: false, isShared: true }] }));
+			mockRequestUrl.mockResolvedValue(
+				jsonResponse(200, {
+					Mounts: [{ id: 'm2', name: 'Shared', type: 'import', isPrimary: false, isShared: true }],
+				})
+			);
 
 			const mounts = await client.listMounts();
 			expect(mounts[0].id).toBe('m2');
@@ -72,7 +80,14 @@ describe('KoofrClient', () => {
 	describe('getItemInfo / itemExists', () => {
 		it('sends the normalized path as a query param', async () => {
 			mockRequestUrl.mockResolvedValue(
-				jsonResponse(200, { name: 'file.md', type: 'file', modified: 1000, size: 10, path: '/notes/file.md', hash: 'abc' })
+				jsonResponse(200, {
+					name: 'file.md',
+					type: 'file',
+					modified: 1000,
+					size: 10,
+					path: '/notes/file.md',
+					hash: 'abc',
+				})
 			);
 
 			const info = await client.getItemInfo('notes/file.md');
@@ -84,14 +99,22 @@ describe('KoofrClient', () => {
 		});
 
 		it('itemExists returns false on a 404', async () => {
-			mockRequestUrl.mockResolvedValue(jsonResponse(404, { error: 'not_found', message: 'Not found' }));
+			mockRequestUrl.mockResolvedValue(
+				jsonResponse(404, { error: 'not_found', message: 'Not found' })
+			);
 
 			expect(await client.itemExists('missing.md')).toBe(false);
 		});
 
 		it('itemExists returns true when info succeeds', async () => {
 			mockRequestUrl.mockResolvedValue(
-				jsonResponse(200, { name: 'file.md', type: 'file', modified: 1000, size: 10, path: '/file.md' })
+				jsonResponse(200, {
+					name: 'file.md',
+					type: 'file',
+					modified: 1000,
+					size: 10,
+					path: '/file.md',
+				})
 			);
 
 			expect(await client.itemExists('file.md')).toBe(true);
@@ -167,7 +190,13 @@ describe('KoofrClient', () => {
 	describe('uploadFile', () => {
 		it('sends a multipart body with parent path, filename, and modified as query params', async () => {
 			mockRequestUrl.mockResolvedValue(
-				jsonResponse(200, { name: 'file.md', type: 'file', modified: 1234, size: 11, hash: 'newhash' })
+				jsonResponse(200, {
+					name: 'file.md',
+					type: 'file',
+					modified: 1234,
+					size: 11,
+					hash: 'newhash',
+				})
 			);
 
 			const content = new TextEncoder().encode('hello world').buffer;

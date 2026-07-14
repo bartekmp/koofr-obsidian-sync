@@ -28,6 +28,7 @@ function makeFileOps() {
 	return {
 		listAllItems: vi.fn().mockResolvedValue([] as KoofrFileInfo[]),
 		listAllFiles: vi.fn().mockResolvedValue([] as KoofrFileInfo[]),
+		seedKnownFolders: vi.fn(),
 		uploadFile: vi.fn(),
 		downloadFile: vi.fn(),
 		deleteFile: vi.fn().mockResolvedValue(undefined),
@@ -62,7 +63,9 @@ describe('SyncEngine', () => {
 		mockApp.fileManager.trashFile.mockResolvedValue(undefined);
 	});
 
-	function makeEngine(options: Partial<Parameters<typeof SyncEngine.prototype.constructor>[6]> = {}) {
+	function makeEngine(
+		options: Partial<Parameters<typeof SyncEngine.prototype.constructor>[6]> = {}
+	) {
 		return new SyncEngine(
 			mockApp as never,
 			fileOps as never,
@@ -110,7 +113,10 @@ describe('SyncEngine', () => {
 			await engine.performSync();
 
 			expect(fileOps.downloadFile).toHaveBeenCalledWith('/note.md');
-			expect(mockApp.vault.adapter.writeBinary).toHaveBeenCalledWith('note.md', expect.any(ArrayBuffer));
+			expect(mockApp.vault.adapter.writeBinary).toHaveBeenCalledWith(
+				'note.md',
+				expect.any(ArrayBuffer)
+			);
 			const state = stateManager.getFileState('note.md');
 			expect(state?.remoteHash).toBe('h1');
 		});
@@ -148,7 +154,9 @@ describe('SyncEngine', () => {
 				size: 5,
 				remoteModifiedTime: 1000,
 			});
-			eventManager.getDirtyFiles = vi.fn().mockReturnValue([{ path: 'note.md', type: LocalChangeType.DELETE }]);
+			eventManager.getDirtyFiles = vi
+				.fn()
+				.mockReturnValue([{ path: 'note.md', type: LocalChangeType.DELETE }]);
 			fileOps.listAllItems.mockResolvedValue([
 				{ name: 'note.md', type: 'file', modified: 1000, size: 5, hash: 'h1', path: '/note.md' },
 			]);
@@ -169,7 +177,9 @@ describe('SyncEngine', () => {
 				size: 5,
 				remoteModifiedTime: 1000,
 			});
-			eventManager.getDirtyFiles = vi.fn().mockReturnValue([{ path: 'note.md', type: LocalChangeType.DELETE }]);
+			eventManager.getDirtyFiles = vi
+				.fn()
+				.mockReturnValue([{ path: 'note.md', type: LocalChangeType.DELETE }]);
 			fileOps.listAllItems.mockResolvedValue([]);
 
 			const engine = makeEngine();
@@ -213,9 +223,18 @@ describe('SyncEngine', () => {
 				size: 5,
 				remoteModifiedTime: 1000,
 			});
-			eventManager.getDirtyFiles = vi.fn().mockReturnValue([{ path: 'note.md', type: LocalChangeType.MODIFY }]);
+			eventManager.getDirtyFiles = vi
+				.fn()
+				.mockReturnValue([{ path: 'note.md', type: LocalChangeType.MODIFY }]);
 			fileOps.listAllItems.mockResolvedValue([
-				{ name: 'note.md', type: 'file', modified: 5000, size: 20, hash: 'new-hash', path: '/note.md' },
+				{
+					name: 'note.md',
+					type: 'file',
+					modified: 5000,
+					size: 20,
+					hash: 'new-hash',
+					path: '/note.md',
+				},
 			]);
 
 			const localFile = makeTFile('note.md', 12, 9000);
@@ -253,9 +272,18 @@ describe('SyncEngine', () => {
 				size: 5,
 				remoteModifiedTime: 1000,
 			});
-			eventManager.getDirtyFiles = vi.fn().mockReturnValue([{ path: 'note.md', type: LocalChangeType.MODIFY }]);
+			eventManager.getDirtyFiles = vi
+				.fn()
+				.mockReturnValue([{ path: 'note.md', type: LocalChangeType.MODIFY }]);
 			fileOps.listAllItems.mockResolvedValue([
-				{ name: 'note.md', type: 'file', modified: 1000, size: 5, hash: 'same-hash', path: '/note.md' },
+				{
+					name: 'note.md',
+					type: 'file',
+					modified: 1000,
+					size: 5,
+					hash: 'same-hash',
+					path: '/note.md',
+				},
 			]);
 
 			const localFile = makeTFile('note.md', 12, 9000);
@@ -297,7 +325,7 @@ describe('SyncEngine', () => {
 			]);
 			mockApp.vault.getAbstractFileByPath.mockReturnValue(makeTFile('new.md', 5, 2000));
 
-			const engine = makeEngine({ useAtomicMoves: true });
+			const engine = makeEngine();
 			await engine.performSync();
 
 			expect(fileOps.moveFile).toHaveBeenCalledWith('/old.md', '/new.md');
@@ -311,8 +339,20 @@ describe('SyncEngine', () => {
 	describe('large delete guard', () => {
 		it('cancels the sync and applies nothing when the user declines', async () => {
 			stateManager.setLastSyncTime(Date.now());
-			stateManager.setFileState('a.md', { path: 'a.md', localMtime: 0, remoteHash: 'h1', size: 1, remoteModifiedTime: 0 });
-			stateManager.setFileState('b.md', { path: 'b.md', localMtime: 0, remoteHash: 'h2', size: 1, remoteModifiedTime: 0 });
+			stateManager.setFileState('a.md', {
+				path: 'a.md',
+				localMtime: 0,
+				remoteHash: 'h1',
+				size: 1,
+				remoteModifiedTime: 0,
+			});
+			stateManager.setFileState('b.md', {
+				path: 'b.md',
+				localMtime: 0,
+				remoteHash: 'h2',
+				size: 1,
+				remoteModifiedTime: 0,
+			});
 			fileOps.listAllItems.mockResolvedValue([]); // both gone remotely -> 2 local deletes
 
 			const largeDeleteWarningHandler = vi.fn().mockResolvedValue('cancel');

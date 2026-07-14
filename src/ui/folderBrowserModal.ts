@@ -238,7 +238,8 @@ export class FolderBrowserModal extends Modal {
 								} catch (error) {
 									new Notice(
 										t('folderBrowser.createFolder.failed', {
-											message: error instanceof Error ? error.message : t('folderBrowser.unknownError'),
+											message:
+												error instanceof Error ? error.message : t('folderBrowser.unknownError'),
 										})
 									);
 								} finally {

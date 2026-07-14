@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { NoticeMock } = vi.hoisted(() => ({
-	NoticeMock: vi.fn(function (this: { message: string; timeout?: number }, message: string, timeout?: number) {
+	NoticeMock: vi.fn(function (
+		this: { message: string; timeout?: number },
+		message: string,
+		timeout?: number
+	) {
 		this.message = message;
 		this.timeout = timeout;
 	}),
@@ -26,7 +30,11 @@ import { AuthenticationError, KoofrError, RateLimitError } from '../../../src/ty
 import { logger } from '../../../src/utils/logger';
 
 function applyDecorator(
-	decorator: (target: unknown, propertyKey: string, descriptor: PropertyDescriptor) => PropertyDescriptor,
+	decorator: (
+		target: unknown,
+		propertyKey: string,
+		descriptor: PropertyDescriptor
+	) => PropertyDescriptor,
 	propertyKey: string,
 	error: unknown
 ): () => Promise<unknown> {
@@ -103,7 +111,10 @@ describe('errors utils', () => {
 
 	describe('parseHttpError', () => {
 		it('returns AuthenticationError for 401 responses', () => {
-			const error = parseHttpError(401, JSON.stringify({ error: 'invalid_grant', message: 'Token expired' }));
+			const error = parseHttpError(
+				401,
+				JSON.stringify({ error: 'invalid_grant', message: 'Token expired' })
+			);
 
 			expect(error).toBeInstanceOf(AuthenticationError);
 			expect(error).toMatchObject({
@@ -114,7 +125,10 @@ describe('errors utils', () => {
 		});
 
 		it('returns AuthenticationError for 403 responses', () => {
-			const error = parseHttpError(403, JSON.stringify({ error: 'forbidden', message: 'Not allowed' }));
+			const error = parseHttpError(
+				403,
+				JSON.stringify({ error: 'forbidden', message: 'Not allowed' })
+			);
 
 			expect(error).toBeInstanceOf(AuthenticationError);
 			expect(error.statusCode).toBe(401);
@@ -132,7 +146,10 @@ describe('errors utils', () => {
 		});
 
 		it('returns KoofrError for other statuses', () => {
-			const error = parseHttpError(500, JSON.stringify({ error: 'server_error', message: 'Internal failure' }));
+			const error = parseHttpError(
+				500,
+				JSON.stringify({ error: 'server_error', message: 'Internal failure' })
+			);
 
 			expect(error).toBeInstanceOf(KoofrError);
 			expect(error).toMatchObject({

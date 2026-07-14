@@ -73,7 +73,9 @@ export class Notice {
 		public message: string,
 		public timeout?: number
 	) {}
-	setMessage(message: string) { this.message = message; }
+	setMessage(message: string) {
+		this.message = message;
+	}
 	hide() {}
 }
 

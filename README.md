@@ -45,17 +45,17 @@ Sync your Obsidian vault with **[Koofr](https://koofr.eu)** cloud storage. Event
 
 ### Configuration
 
-| Setting | Description |
-| --- | --- |
-| **Sync Interval** | Set to 0 for manual-only sync (recommended for battery life) |
-| **Sync on file change** | Disable to only sync on the periodic interval / manually |
-| **Startup Sync Delay** | Delay before first sync after launch (0 = disabled, 10s recommended) |
-| **Conflict Resolution** | Last write wins (default), create duplicate, or manual |
-| **Sync App Settings** | Optional — sync `.obsidian/app.json`, `appearance.json`, `hotkeys.json` |
-| **Sync Plugins** | Optional — sync plugin lists, manifests, and binaries (not plugin data files) |
-| **Sync CSS Snippets** | Optional — sync `.obsidian/snippets/` |
-| **Pull-Only Mode** | (Experimental) Download only, never upload local edits |
-| **Debug Logging** | Writes a daily log under `_KoofrSyncLogs/YYYY-MM-DD.md` (device-local, never synced) |
+| Setting                 | Description                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| **Sync Interval**       | Set to 0 for manual-only sync (recommended for battery life)                         |
+| **Sync on file change** | Disable to only sync on the periodic interval / manually                             |
+| **Startup Sync Delay**  | Delay before first sync after launch (0 = disabled, 10s recommended)                 |
+| **Conflict Resolution** | Last write wins (default), create duplicate, or manual                               |
+| **Sync App Settings**   | Optional — sync `.obsidian/app.json`, `appearance.json`, `hotkeys.json`              |
+| **Sync Plugins**        | Optional — sync plugin lists, manifests, and binaries (not plugin data files)        |
+| **Sync CSS Snippets**   | Optional — sync `.obsidian/snippets/`                                                |
+| **Pull-Only Mode**      | (Experimental) Download only, never upload local edits                               |
+| **Debug Logging**       | Writes a daily log under `_KoofrSyncLogs/YYYY-MM-DD.md` (device-local, never synced) |
 
 ### Commands
 
@@ -74,7 +74,7 @@ Koofr's REST API has no incremental "what changed since X" endpoint (unlike some
 ## Known limitations / not yet verified
 
 - **Large file uploads**: Koofr's upload endpoint takes the whole file in a single request — there's no chunked/resumable upload API to fall back to for very large attachments.
-- **Folder auto-creation on upload**: unconfirmed whether Koofr auto-creates missing parent folders when uploading — the plugin checks and creates them explicitly by default (see the "Skip folder existence checks" experimental setting, off by default until this is verified).
+- **Folder auto-creation on upload**: unconfirmed whether Koofr auto-creates missing parent folders when uploading — the plugin always ensures the parent folder exists before uploading. This check is essentially free (it's answered from the remote folder listing already fetched at the start of each sync) and only makes a real request for folders that are genuinely new, so there's no toggle for it.
 - **Token expiry**: Koofr has no documented refresh-token flow. The plugin re-authenticates from your stored email/app password whenever a request returns 401 — this hasn't been stress-tested against real-world token lifetimes yet.
 - Only English strings are included for now; the i18n infrastructure supports additional locales (see `src/i18n/`), contributions welcome.
 

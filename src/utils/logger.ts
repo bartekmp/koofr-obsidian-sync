@@ -6,7 +6,6 @@
  * logger.* instead of console.* directly.
  */
 
-
 export enum LogLevel {
 	DEBUG = 0,
 	INFO = 1,
@@ -58,21 +57,32 @@ class Logger {
 
 	private formatExtraArgs(args: unknown[]): string {
 		if (args.length === 0) return '';
-		return ' ' + args.map(a => {
-			if (a instanceof Error) {
-				const obj: Record<string, unknown> = {};
-				// Merge any enumerable own properties (e.g. code, statusCode on KoofrError) first,
-				// then overwrite with the non-enumerable Error properties so they always take precedence.
-				Object.assign(obj, a);
-				obj.name = a.name;
-				obj.message = a.message;
-				if (a.stack) obj.stack = a.stack;
-				try { return JSON.stringify(obj); }
-				catch { return String(a); }
-			}
-			try { return typeof a === 'string' ? a : JSON.stringify(a); }
-			catch { return String(a); }
-		}).join(' ');
+		return (
+			' ' +
+			args
+				.map((a) => {
+					if (a instanceof Error) {
+						const obj: Record<string, unknown> = {};
+						// Merge any enumerable own properties (e.g. code, statusCode on KoofrError) first,
+						// then overwrite with the non-enumerable Error properties so they always take precedence.
+						Object.assign(obj, a);
+						obj.name = a.name;
+						obj.message = a.message;
+						if (a.stack) obj.stack = a.stack;
+						try {
+							return JSON.stringify(obj);
+						} catch {
+							return String(a);
+						}
+					}
+					try {
+						return typeof a === 'string' ? a : JSON.stringify(a);
+					} catch {
+						return String(a);
+					}
+				})
+				.join(' ')
+		);
 	}
 
 	private addToBuffer(line: string): void {

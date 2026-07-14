@@ -37,7 +37,8 @@ export class EventManager {
 		private app: App,
 		private onSyncTriggered: () => Promise<void>,
 		private stateManager: SyncStateManager,
-		private shouldSyncPath: (path: string) => boolean = (path) => shouldSyncVaultPath(path, false, false, app.vault.configDir)
+		private shouldSyncPath: (path: string) => boolean = (path) =>
+			shouldSyncVaultPath(path, false, false, app.vault.configDir)
 	) {}
 
 	/**
@@ -161,8 +162,8 @@ export class EventManager {
 					// If file is already tracked in sync state, this is Obsidian
 					// re-indexing on startup — not a real new file
 					if (this.stateManager.getFileState(file.path)) {
-							return;
-						}
+						return;
+					}
 					this.dirtyFiles.set(file.path, { path: file.path, type: LocalChangeType.CREATE });
 					this.scheduleSync();
 				} else if (file instanceof TFolder && !this.shouldIgnoreEvent(file.path)) {
@@ -214,7 +215,10 @@ export class EventManager {
 						});
 					} else {
 						// New folder being renamed (e.g., "Untitled" → real name) — treat as create
-						this.dirtyFiles.set(file.path, { path: file.path, type: LocalChangeType.FOLDER_CREATE });
+						this.dirtyFiles.set(file.path, {
+							path: file.path,
+							type: LocalChangeType.FOLDER_CREATE,
+						});
 					}
 					this.scheduleSync();
 				}
