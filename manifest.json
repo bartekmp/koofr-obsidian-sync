@@ -1,7 +1,7 @@
 {
 	"id": "koofr-sync",
 	"name": "Koofr Sync",
-	"version": "0.2.3",
+	"version": "0.2.4",
 	"minAppVersion": "1.12.0",
 	"description": "Sync your vault with Koofr cloud storage.",
 	"author": "",
