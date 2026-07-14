@@ -34,7 +34,7 @@
 		"@vitest/coverage-v8": "^4.1.8",
 		"@vitest/ui": "^4.1.8",
 		"esbuild": "^0.28.1",
-		"eslint": "^8.56.0",
+		"eslint": "^10.7.0",
 		"eslint-plugin-obsidian-compat": "file:eslint-plugin-obsidian-compat",
 		"husky": "^9.0.0",
 		"obsidian": "latest",
