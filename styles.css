@@ -11,6 +11,13 @@
 	margin-top: 4px;
 }
 
+.koofr-sync-exclude-patterns {
+	width: 100%;
+	min-height: 6em;
+	font-family: var(--font-monospace);
+	resize: vertical;
+}
+
 .koofr-sync-folder-browser-create-row {
 	margin-bottom: 12px;
 	padding-top: 4px;

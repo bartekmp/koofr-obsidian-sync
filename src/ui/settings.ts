@@ -11,7 +11,7 @@ import {
 	ExperimentalSettings,
 	DEFAULT_EXPERIMENTAL_SETTINGS,
 } from '../types';
-import { KOOFR_APP_PASSWORD_URL, SYNC_INTERVAL_OPTIONS } from '../constants';
+import { KOOFR_APP_PASSWORD_URL, SYNC_INTERVAL_OPTIONS, SYNC_IGNORE_FILE } from '../constants';
 import { FolderBrowserModal, FolderSelection } from './folderBrowserModal';
 import type { SyncStatusInfo } from '../main';
 import { SyncStatus } from './statusBar';
@@ -28,8 +28,11 @@ interface KoofrPlugin {
 	resetSyncToken(): Promise<void>;
 	reconcileFromCloud(): Promise<void>;
 	authenticate(email: string, appPassword: string): Promise<void>;
+	testConnection(): Promise<void>;
 	disconnect(): void;
 	triggerManualSync(): Promise<void>;
+	readSyncIgnore(): Promise<string>;
+	writeSyncIgnore(content: string): Promise<void>;
 	listMounts(): Promise<KoofrMount[]>;
 	listFoldersForPicker(mountId: string, path: string): Promise<KoofrFileInfo[]>;
 	createFolderForPicker(mountId: string, parentPath: string, name: string): Promise<void>;
@@ -78,6 +81,29 @@ export class KoofrSettingTab extends PluginSettingTab {
 			statusSetting.setDesc(
 				t('settings.auth.connectionStatus.connectedAs', {
 					email: this.plugin.settings.connectedEmail || '',
+				})
+			);
+			statusSetting.addButton((button) =>
+				button.setButtonText(t('settings.auth.connectionStatus.test')).onClick(async () => {
+					const original = button.buttonEl.textContent;
+					button.setDisabled(true);
+					button.setButtonText(t('settings.auth.connectionStatus.testing'));
+					try {
+						await this.plugin.testConnection();
+						new Notice(t('settings.auth.connectionStatus.testSuccess'));
+					} catch (error) {
+						new Notice(
+							t('settings.auth.connectionStatus.testFailed', {
+								message:
+									error instanceof Error
+										? error.message
+										: t('settings.auth.connectionStatus.unknownError'),
+							})
+						);
+					} finally {
+						button.setDisabled(false);
+						button.setButtonText(original ?? t('settings.auth.connectionStatus.test'));
+					}
 				})
 			);
 			statusSetting.addButton((button) =>
@@ -322,6 +348,46 @@ export class KoofrSettingTab extends PluginSettingTab {
 					await this.plugin.onCssSnippetSyncChanged(value);
 				})
 			);
+
+		// Excluded patterns — a plain editor over the vault-root .syncIgnore
+		// file. The sync engine re-reads that file on every run, so writing it
+		// here is all that's needed; no engine coordination required. Saved on
+		// blur to avoid rewriting the file on every keystroke.
+		new Setting(containerEl)
+			.setName(t('settings.sync.excludePatterns.name'))
+			.setDesc(t('settings.sync.excludePatterns.desc'))
+			.addTextArea((textArea) => {
+				textArea.setPlaceholder(t('settings.sync.excludePatterns.placeholder'));
+				textArea.inputEl.rows = 5;
+				textArea.inputEl.addClass('koofr-sync-exclude-patterns');
+
+				let loaded = '';
+				void this.plugin.readSyncIgnore().then((content) => {
+					loaded = content;
+					textArea.setValue(content);
+				});
+
+				textArea.inputEl.addEventListener('blur', async () => {
+					const value = textArea.getValue();
+					if (value === loaded) return;
+					try {
+						await this.plugin.writeSyncIgnore(value);
+						loaded = value;
+						new Notice(t('settings.sync.excludePatterns.saved'));
+					} catch (error) {
+						new Notice(
+							t('settings.sync.excludePatterns.saveFailed', {
+								message: error instanceof Error ? error.message : String(error),
+							})
+						);
+					}
+				});
+			});
+
+		containerEl.createEl('p', {
+			text: t('settings.sync.excludePatterns.fileHint', { file: SYNC_IGNORE_FILE }),
+			cls: 'setting-item-description koofr-sync-settings-help',
+		});
 	}
 
 	private displaySyncStatus(containerEl: HTMLElement): void {

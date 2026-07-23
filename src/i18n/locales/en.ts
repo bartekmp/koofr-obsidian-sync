@@ -174,6 +174,10 @@ export const en = {
 				missingFields: 'Enter both your email and an app password first.',
 				connectFailed: 'Failed to connect: {{message}}',
 				unknownError: 'Unknown error',
+				test: 'Test connection',
+				testing: 'Testing...',
+				testSuccess: 'Connection to Koofr is working.',
+				testFailed: 'Connection test failed: {{message}}',
 			},
 			appPasswordHelpPrefix:
 				'Koofr requires an app-specific password for third-party connections — your regular account password will not work. Generate one at ',
@@ -235,6 +239,14 @@ export const en = {
 			cssSnippets: {
 				name: 'Sync CSS snippets',
 				desc: 'Sync CSS snippets from {{configDir}}/snippets/ to keep custom styles consistent across devices.',
+			},
+			excludePatterns: {
+				name: 'Excluded patterns',
+				desc: 'Glob patterns for files and folders to skip, one per line. Use * for any characters within a name, ** to match across folders, and a trailing / for a folder. Lines starting with # are comments. Saved to .syncIgnore in your vault root and applied on the next sync.',
+				placeholder: '*.tmp\nAttachments/large/**\n# this is a comment',
+				saved: 'Excluded patterns saved.',
+				saveFailed: 'Could not save excluded patterns: {{message}}',
+				fileHint: 'Stored in {{file}} at your vault root. Leave empty to remove it.',
 			},
 			status: {
 				name: 'Sync status',

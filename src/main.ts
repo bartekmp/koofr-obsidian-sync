@@ -31,6 +31,7 @@ import { KoofrAuthProvider } from './auth/koofrAuthProvider';
 // API
 import { KoofrClient } from './api/koofrClient';
 import { FileOperations } from './api/fileOperations';
+import { SYNC_IGNORE_FILE } from './constants';
 
 // Sync
 import { SyncEngine } from './sync/syncEngine';
@@ -530,6 +531,49 @@ export default class KoofrSyncPlugin extends Plugin {
 		}
 		const fullPath = parentPath === '/' ? `/${name}` : `${parentPath}/${name}`;
 		await this.koofrClient.createFolder(fullPath, mountId);
+	}
+
+	/**
+	 * Verify the current connection by making a lightweight authenticated
+	 * request (listing mounts). Throws if credentials are missing/invalid or
+	 * the request fails — the settings tab surfaces the result to the user.
+	 */
+	async testConnection(): Promise<void> {
+		if (!this.koofrClient) {
+			throw new Error('Not connected to Koofr');
+		}
+		await this.koofrClient.listMounts();
+	}
+
+	/**
+	 * Read the vault-root `.syncIgnore` file (glob patterns excluded from
+	 * sync). Returns an empty string if the file does not exist.
+	 */
+	async readSyncIgnore(): Promise<string> {
+		try {
+			if (await this.app.vault.adapter.exists(SYNC_IGNORE_FILE)) {
+				return await this.app.vault.adapter.read(SYNC_IGNORE_FILE);
+			}
+		} catch {
+			// Fall through — treat unreadable file as empty.
+		}
+		return '';
+	}
+
+	/**
+	 * Write the vault-root `.syncIgnore` file. An empty/whitespace-only value
+	 * removes the file so the engine falls back to its defaults. The engine
+	 * re-reads this file on every sync, so no further coordination is needed.
+	 */
+	async writeSyncIgnore(content: string): Promise<void> {
+		const adapter = this.app.vault.adapter;
+		if (content.trim().length === 0) {
+			if (await adapter.exists(SYNC_IGNORE_FILE)) {
+				await adapter.remove(SYNC_IGNORE_FILE);
+			}
+			return;
+		}
+		await adapter.write(SYNC_IGNORE_FILE, content);
 	}
 
 	/**

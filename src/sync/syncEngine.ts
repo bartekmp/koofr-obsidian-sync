@@ -74,6 +74,7 @@ import {
 	SyncEngineOptions,
 	SyncEngineConflictQueue,
 } from '../types';
+import { SYNC_IGNORE_FILE } from '../constants';
 import { logger } from '../utils/logger';
 import {
 	normalizePath,
@@ -1304,7 +1305,7 @@ export class SyncEngine {
 		const patterns = [...SyncEngine.DEFAULT_IGNORE_PATTERNS];
 
 		try {
-			const content = await this.app.vault.adapter.read('.syncIgnore');
+			const content = await this.app.vault.adapter.read(SYNC_IGNORE_FILE);
 			if (typeof content === 'string' && content.trim().length > 0) {
 				patterns.push(...this.parseSyncIgnorePatterns(content));
 			}

@@ -60,8 +60,24 @@ Sync your Obsidian vault with **[Koofr](https://koofr.eu)** cloud storage. Event
 | **Sync App Settings** | Optional — sync `.obsidian/app.json`, `appearance.json`, `hotkeys.json`. |
 | **Sync Plugins** | Optional — sync plugin lists, manifests, and binaries (not plugin data files). |
 | **Sync CSS Snippets** | Optional — sync `.obsidian/snippets/`. |
+| **Excluded Patterns** | Glob patterns for files/folders to skip, stored in `.syncIgnore`. See below. |
 | **Pull-Only Mode** | (Experimental) Download only, never upload local edits. |
 | **Debug Logging** | Writes a daily log under `_KoofrSyncLogs/YYYY-MM-DD.md` (device-local, never synced). |
+
+Under **Authentication**, a **Test connection** button verifies your stored credentials still work by making a lightweight authenticated request — handy since Koofr has no documented token lifetime.
+
+### Excluding files from sync
+
+Add glob patterns — one per line — under **Settings → Sync Configuration → Excluded patterns**. They're saved to a `.syncIgnore` file in your vault root and applied on the next sync (you can also edit that file directly).
+
+| Pattern | Matches |
+| --- | --- |
+| `*.tmp` | any `.tmp` file, in any folder |
+| `Attachments/large/**` | everything under `Attachments/large/` |
+| `Drafts/` | the whole `Drafts/` folder (trailing slash = folder) |
+| `# note` | a comment (ignored) |
+
+`*` matches any characters within a single name; `**` matches across folder boundaries.
 
 ### Commands
 

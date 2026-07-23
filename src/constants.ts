@@ -24,6 +24,10 @@ export const PLUGIN_INFO = {
 // Link shown in settings for generating an app-specific password
 export const KOOFR_APP_PASSWORD_URL = 'https://app.koofr.net/app/admin/preferences/password';
 
+// Vault-root file holding user-defined glob patterns to exclude from sync.
+// Read fresh on every sync by the engine, and edited via the settings tab.
+export const SYNC_IGNORE_FILE = '.syncIgnore';
+
 /**
  * Discrete stops for the "Automatic sync interval" slider, in minutes.
  * 0 means manual-only. The slider itself is index-based over this list so
