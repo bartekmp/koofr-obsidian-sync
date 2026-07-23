@@ -1,4 +1,7 @@
-# Obsidian Koofr Sync
+<div align="center">
+  <img src="assets/obsidian-koofr-sync.png" alt="Obsidian Koofr Sync logo" width="200">
+  <h1>Obsidian Koofr Sync</h1>
+</div>
 
 [![CI](https://github.com/bartekmp/koofr-obsidian-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/bartekmp/koofr-obsidian-sync/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
