@@ -1,6 +1,6 @@
 {
 	"name": "koofr-sync",
-	"version": "0.2.5",
+	"version": "0.3.0",
 	"description": "Sync your Obsidian vault with Koofr cloud storage",
 	"main": "main.js",
 	"scripts": {
