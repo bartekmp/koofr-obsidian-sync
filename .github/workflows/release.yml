@@ -72,6 +72,12 @@ jobs:
     needs: test
     if: needs.test.outputs.should_release == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # Required for actions/attest-build-provenance to sign the release
+      # artifacts, letting users verify they were built from this repo.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -107,6 +113,13 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            styles.css
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3

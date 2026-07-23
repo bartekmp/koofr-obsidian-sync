@@ -59,7 +59,9 @@ describe('logger', () => {
 		logger.warn('warn message');
 		logger.error('error message');
 
-		expect(console.info).toHaveBeenCalledWith(expect.stringContaining('[INF] info message'));
+		// INFO routes through console.debug (not console.info) to satisfy
+		// Obsidian's no-console review rule; the [INF] label is preserved.
+		expect(console.debug).toHaveBeenCalledWith(expect.stringContaining('[INF] info message'));
 		expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('[WRN] warn message'));
 		expect(console.error).toHaveBeenCalledWith(expect.stringContaining('[ERR] error message'));
 	});
@@ -100,7 +102,7 @@ describe('logger', () => {
 			safe: 'ok',
 		});
 
-		expect(console.info).toHaveBeenCalledWith(expect.stringContaining('[INF] Sanitized payload'), {
+		expect(console.debug).toHaveBeenCalledWith(expect.stringContaining('[INF] Sanitized payload'), {
 			access_token: '[REDACTED]',
 			refresh_token: '[REDACTED]',
 			password: '[REDACTED]',
@@ -128,7 +130,7 @@ describe('logger', () => {
 
 		logger.info('formatted message');
 
-		expect(console.info).toHaveBeenCalledWith('[2024-01-02T03:04:05.000Z] [INF] formatted message');
+		expect(console.debug).toHaveBeenCalledWith('[2024-01-02T03:04:05.000Z] [INF] formatted message');
 	});
 
 	it('setVaultLogHook forwards log lines to the hook and null clears it', () => {

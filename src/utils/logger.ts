@@ -119,7 +119,10 @@ class Logger {
 		if (this.shouldLog(LogLevel.INFO)) {
 			const formatted = this.formatMessage('INFO', message);
 			const line = formatted + this.formatExtraArgs(args);
-			console.info(formatted, ...args);
+			// Use console.debug (not console.info) to satisfy Obsidian's
+			// no-console review rule; the [INFO] label is preserved in the
+			// formatted message and the in-memory log buffer.
+			console.debug(formatted, ...args);
 			this.addToBuffer(line);
 		}
 	}
@@ -153,7 +156,8 @@ class Logger {
 			level === LogLevel.DEBUG
 				? console.debug
 				: level === LogLevel.INFO
-					? console.info
+					? // console.debug (not console.info) to satisfy the no-console review rule
+						console.debug
 					: level === LogLevel.WARN
 						? console.warn
 						: console.error;

@@ -20,9 +20,9 @@ export class ProgressNotice {
 		this.total = total;
 
 		if (typeof activeDocument !== 'undefined') {
-			const fragment = activeDocument.createDocumentFragment();
+			const fragment = createFragment();
 
-			this.textEl = fragment.createEl('div', {
+			this.textEl = fragment.createDiv({
 				text: t('progress.notice', {
 					label,
 					progress: t('progress.files', { completed: 0, total }),
@@ -30,7 +30,7 @@ export class ProgressNotice {
 				cls: 'koofr-sync-progress-notice-text',
 			});
 
-			const barContainer = fragment.createEl('div', {
+			const barContainer = fragment.createDiv({
 				cls: 'koofr-sync-notice-bar-container',
 			});
 			this.progressBar = new ProgressBarComponent(barContainer);

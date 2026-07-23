@@ -109,7 +109,7 @@ export class FolderBrowserModal extends Modal {
 			const label = mount.isPrimary
 				? t('folderBrowser.primaryMount', { name: mount.name })
 				: mount.name;
-			row.createEl('span', { text: `${icon} ${label}` });
+			row.createSpan({ text: `${icon} ${label}` });
 			row.onclick = () => {
 				this.selectedMount = mount;
 				this.currentPath = [];
@@ -136,7 +136,7 @@ export class FolderBrowserModal extends Modal {
 		});
 
 		if (this.mounts.length > 1) {
-			const backLink = breadcrumb.createEl('span', {
+			const backLink = breadcrumb.createSpan({
 				text: `← ${t('folderBrowser.changeMount')}`,
 				cls: 'koofr-sync-folder-breadcrumb-link',
 			});
@@ -145,10 +145,10 @@ export class FolderBrowserModal extends Modal {
 				this.currentPath = [];
 				this.renderMountList();
 			};
-			breadcrumb.createEl('span', { text: '  ' });
+			breadcrumb.createSpan({ text: '  ' });
 		}
 
-		const rootLink = breadcrumb.createEl('span', {
+		const rootLink = breadcrumb.createSpan({
 			text: `📦 ${mount.name}`,
 			cls: 'koofr-sync-folder-breadcrumb-link',
 		});
@@ -158,8 +158,8 @@ export class FolderBrowserModal extends Modal {
 		};
 
 		for (let i = 0; i < this.currentPath.length; i++) {
-			breadcrumb.createEl('span', { text: ' / ' });
-			const seg = breadcrumb.createEl('span', { text: this.currentPath[i] });
+			breadcrumb.createSpan({ text: ' / ' });
+			const seg = breadcrumb.createSpan({ text: this.currentPath[i] });
 			if (i < this.currentPath.length - 1) {
 				seg.addClass('koofr-sync-folder-breadcrumb-link');
 				const depth = i;
@@ -274,7 +274,7 @@ export class FolderBrowserModal extends Modal {
 				const row = body.createDiv({
 					cls: 'folder-row koofr-sync-folder-row',
 				});
-				row.createEl('span', { text: `📁 ${folder.name}` });
+				row.createSpan({ text: `📁 ${folder.name}` });
 
 				row.onclick = () => {
 					this.currentPath.push(folder.name);

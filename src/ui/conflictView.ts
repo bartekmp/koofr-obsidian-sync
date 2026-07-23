@@ -125,23 +125,23 @@ export class ConflictView extends ItemView {
 		const meta = card.createDiv({ cls: 'koofr-sync-conflict-meta' });
 		const currentMeta = meta.createDiv({ cls: 'koofr-sync-conflict-meta-side' });
 		currentMeta.createEl('strong', { text: t('conflictView.currentLabel') });
-		currentMeta.createEl('span', {
+		currentMeta.createSpan({
 			text: t('conflictView.modified', {
 				time: new Date(entry.localModifiedTime).toLocaleString(),
 			}),
 		});
-		currentMeta.createEl('span', {
+		currentMeta.createSpan({
 			text: t('conflictView.size', { size: this.formatSize(entry.localSize) }),
 		});
 
 		const incomingMeta = meta.createDiv({ cls: 'koofr-sync-conflict-meta-side' });
 		incomingMeta.createEl('strong', { text: t('conflictView.incomingLabel') });
-		incomingMeta.createEl('span', {
+		incomingMeta.createSpan({
 			text: t('conflictView.modified', {
 				time: new Date(entry.remoteModifiedTime).toLocaleString(),
 			}),
 		});
-		incomingMeta.createEl('span', {
+		incomingMeta.createSpan({
 			text: t('conflictView.size', { size: this.formatSize(entry.remoteSize) }),
 		});
 
@@ -211,7 +211,7 @@ export class ConflictView extends ItemView {
 			const pre = diffContainer.createEl('pre');
 
 			for (const part of diffResult) {
-				const span = pre.createEl('span');
+				const span = pre.createSpan();
 				if (part.added) {
 					span.addClass('koofr-sync-diff-added');
 					span.textContent = this.prefixLines(part.value, '+ ');
