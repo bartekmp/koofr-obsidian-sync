@@ -9,6 +9,14 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # typescript-eslint (our lint toolchain) only supports TypeScript
+      # <6.1.0. TypeScript 6.0/7.0 (the native compiler port) can't be
+      # installed alongside it — npm ci fails on the peer conflict. Ignore
+      # major TS bumps until typescript-eslint supports them.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: "github-actions"
     directory: "/"
