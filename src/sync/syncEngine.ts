@@ -609,7 +609,7 @@ export class SyncEngine {
 				sampleLocalDeletes: localDeletes.slice(0, 10),
 				sampleRemoteDeletes: remoteDeletes.slice(0, 10),
 			});
-		} catch (err) {
+		} catch (_err) {
 			logger.error(`Large-delete warning handler threw; cancelling sync as a safety default`);
 			return 'cancel';
 		}

@@ -215,10 +215,6 @@ export class KoofrSettingTab extends PluginSettingTab {
 
 		const { configDir } = this.app.vault;
 
-		// Sync interval — a plain dropdown over SYNC_INTERVAL_OPTIONS. (A
-		// slider was tried here and dropped: Obsidian's Setting control
-		// column is sized for compact controls, not a multi-stop labeled
-		// slider with tick marks, and it never rendered cleanly.)
 		const closestIntervalIndex = (minutes: number): number => {
 			let bestIndex = 0;
 			let bestDiff = Infinity;

@@ -80,7 +80,7 @@ module.exports = {
 						if (node.callee.type !== "Identifier") return;
 						if (!timerNames.has(node.callee.name)) return;
 						// Allow if it's inside timerApi.ts (the wrapper itself)
-						const filename = context.getFilename();
+						const filename = context.filename;
 						if (filename.endsWith("timerApi.ts") || filename.endsWith("timerApi.js")) return;
 						context.report({
 							node,
@@ -137,7 +137,7 @@ module.exports = {
 						const obj = node.callee.object;
 						if (obj.type === "ThisExpression" || obj.type === "Super") {
 							// Check if inside a class that looks like a PluginSettingTab
-							const filename = context.getFilename();
+							const filename = context.filename;
 							if (filename.includes("settings") || filename.includes("Settings")) {
 								context.report({
 									node,
