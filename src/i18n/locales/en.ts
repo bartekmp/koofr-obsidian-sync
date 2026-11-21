@@ -4,6 +4,7 @@ export const en = {
 		disconnect: 'Disconnect from Koofr',
 		forceFullSync: 'Force full sync (re-download everything)',
 		reconcileFromCloud: 'Reconcile from cloud (cloud-as-truth recovery)',
+		reconcileToCloud: 'Force upload local → cloud (local-as-truth recovery)',
 		showConflicts: 'Show sync conflicts',
 		devCreateTestConflict: 'DEV: Create test conflict (for testing conflict UI)',
 	},
@@ -82,16 +83,18 @@ export const en = {
 			engineFailed: 'Koofr sync failed: {{message}}',
 		},
 		reconcile: {
-			notConnected: 'Reconcile from cloud: not connected to Koofr.',
-			selectFolderFirst: 'Reconcile from cloud: select a sync folder in settings first.',
-			engineNotInitialized: 'Reconcile from cloud: sync engine not initialized.',
-			alreadyInProgress: 'Reconcile from cloud: a sync is already in progress.',
-			listing: 'Reconcile from cloud: listing Koofr...',
-			cancelled: 'Reconcile from cloud cancelled.',
-			alreadyInSync: 'Reconcile from cloud: already in sync.',
+			notConnected: 'Reconcile: not connected to Koofr.',
+			selectFolderFirst: 'Reconcile: select a sync folder in settings first.',
+			engineNotInitialized: 'Reconcile: sync engine not initialized.',
+			alreadyInProgress: 'Reconcile: a sync is already in progress.',
+			listing: 'Reconcile: listing Koofr...',
+			cancelled: 'Reconcile cancelled.',
+			alreadyInSync: 'Reconcile: already in sync.',
 			complete:
 				'Reconcile from cloud complete: {{downloaded}} downloaded, {{deleted}} deleted, {{refreshed}} refreshed.',
-			failed: 'Reconcile from cloud failed: {{message}}',
+			toCloudComplete:
+				'Force upload complete: {{uploaded}} uploaded, {{deleted}} deleted from Koofr, {{refreshed}} refreshed.',
+			failed: 'Reconcile failed: {{message}}',
 		},
 		dev: {
 			noFileFound: 'Koofr DEV: No file found to create a test conflict',
@@ -297,6 +300,11 @@ export const en = {
 				name: 'Reconcile from cloud',
 				desc: 'Treat cloud as authoritative. Deletes local files that no longer exist on Koofr and downloads anything missing. Destructive — confirmation required for large deletes.',
 				button: 'Reconcile from cloud',
+			},
+			reconcileToCloud: {
+				name: 'Force upload local → cloud',
+				desc: 'Treat this vault as authoritative. Uploads local-only and changed files, and deletes files from Koofr that do not exist locally. Destructive — confirmation required for large deletes.',
+				button: 'Force upload',
 			},
 		},
 		experimental: {

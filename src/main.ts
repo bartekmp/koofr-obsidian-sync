@@ -175,6 +175,14 @@ export default class KoofrSyncPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: 'reconcile-to-cloud',
+			name: t('commands.reconcileToCloud'),
+			callback: async () => {
+				await this.reconcileToCloud();
+			},
+		});
+
+		this.addCommand({
 			id: 'show-conflicts',
 			name: t('commands.showConflicts'),
 			callback: () => {
@@ -838,6 +846,18 @@ export default class KoofrSyncPlugin extends Plugin {
 	 * downloaded. Destructive deletes are confirmed via the large-delete modal.
 	 */
 	async reconcileFromCloud(): Promise<void> {
+		await this.runRecovery((engine) => engine.reconcileFromCloud());
+	}
+
+	/**
+	 * Inverse recovery: treat the local vault as authoritative. Local-only
+	 * files are uploaded, files only on Koofr are deleted.
+	 */
+	async reconcileToCloud(): Promise<void> {
+		await this.runRecovery((engine) => engine.reconcileToCloud());
+	}
+
+	private async runRecovery(operation: (engine: SyncEngine) => Promise<void>): Promise<void> {
 		if (!this.credentialStorage.hasCredentials()) {
 			new Notice(t('notices.reconcile.notConnected'));
 			return;
@@ -857,7 +877,7 @@ export default class KoofrSyncPlugin extends Plugin {
 		this.isSyncing = true;
 		try {
 			this.setSyncStatus(SyncStatus.SYNCING);
-			await this.syncEngine.reconcileFromCloud();
+			await operation(this.syncEngine);
 			await this.saveSettings();
 			this.setSyncStatus(SyncStatus.IDLE);
 		} catch (error) {

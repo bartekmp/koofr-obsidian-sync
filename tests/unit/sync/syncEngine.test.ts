@@ -487,4 +487,63 @@ describe('SyncEngine', () => {
 			expect(fileOps.createFolder).toHaveBeenCalledWith('/A');
 		});
 	});
+
+	describe('reconcileToCloud', () => {
+		it('uploads local-only and mismatched files, deletes remote-only files', async () => {
+			mockApp.vault.getFiles.mockReturnValue([
+				makeTFile('local-only.md', 5, 1000),
+				makeTFile('changed.md', 7, 1000),
+				makeTFile('same.md', 4, 1000),
+			]);
+			mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) =>
+				path === 'local-only.md'
+					? makeTFile('local-only.md', 5, 1000)
+					: path === 'changed.md'
+						? makeTFile('changed.md', 7, 1000)
+						: null
+			);
+			mockApp.vault.readBinary.mockResolvedValue(new ArrayBuffer(3));
+			fileOps.uploadFile.mockResolvedValue({ hash: 'u', modified: 1000 });
+			fileOps.listAllItems.mockResolvedValue([
+				{
+					name: 'changed.md',
+					type: 'file',
+					modified: 1,
+					size: 99,
+					hash: 'h1',
+					path: '/changed.md',
+				},
+				{ name: 'same.md', type: 'file', modified: 1, size: 4, hash: 'h2', path: '/same.md' },
+				{
+					name: 'remote-only.md',
+					type: 'file',
+					modified: 1,
+					size: 3,
+					hash: 'h3',
+					path: '/remote-only.md',
+				},
+			]);
+
+			await makeEngine().reconcileToCloud();
+
+			const uploaded = fileOps.uploadFile.mock.calls.map((c) => c[0]).sort();
+			expect(uploaded).toEqual(['/changed.md', '/local-only.md']);
+			expect(fileOps.deleteFile).toHaveBeenCalledWith('/remote-only.md');
+			expect(fileOps.deleteFile).toHaveBeenCalledTimes(1);
+			expect(fileOps.downloadFile).not.toHaveBeenCalled();
+		});
+
+		it('applies nothing when the user declines the large-delete warning', async () => {
+			fileOps.listAllItems.mockResolvedValue([
+				{ name: 'a.md', type: 'file', modified: 1, size: 1, hash: 'h', path: '/a.md' },
+			]);
+
+			await makeEngine({
+				getLargeDeleteThreshold: () => 1,
+				largeDeleteWarningHandler: vi.fn().mockResolvedValue('cancel'),
+			}).reconcileToCloud();
+
+			expect(fileOps.deleteFile).not.toHaveBeenCalled();
+		});
+	});
 });
