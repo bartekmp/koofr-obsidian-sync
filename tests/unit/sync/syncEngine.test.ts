@@ -461,5 +461,30 @@ describe('SyncEngine', () => {
 			expect(fileOps.deleteFile).toHaveBeenCalledWith('/OldFolder');
 			expect(stateManager.hasFolderPath('OldFolder')).toBe(false);
 		});
+
+		it('re-queues a failed folder delete for the next sync', async () => {
+			stateManager.addFolderPath('OldFolder');
+			const dirty = [{ path: 'OldFolder', type: LocalChangeType.FOLDER_DELETE }];
+			eventManager.getDirtyFiles = vi.fn().mockReturnValue(dirty);
+			const addDirtyChange = vi.spyOn(eventManager, 'addDirtyChange');
+			fileOps.deleteFile.mockRejectedValue(new Error('boom'));
+
+			await makeEngine().performSync();
+
+			expect(addDirtyChange).toHaveBeenCalledWith(dirty[0]);
+		});
+
+		it('skips creating descendants of a folder whose create failed', async () => {
+			eventManager.getDirtyFiles = vi.fn().mockReturnValue([
+				{ path: 'A', type: LocalChangeType.FOLDER_CREATE },
+				{ path: 'A/B', type: LocalChangeType.FOLDER_CREATE },
+			]);
+			fileOps.createFolder.mockRejectedValue(new Error('boom'));
+
+			await makeEngine().performSync();
+
+			expect(fileOps.createFolder).toHaveBeenCalledTimes(1);
+			expect(fileOps.createFolder).toHaveBeenCalledWith('/A');
+		});
 	});
 });

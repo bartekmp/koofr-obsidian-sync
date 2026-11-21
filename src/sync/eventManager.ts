@@ -151,6 +151,14 @@ export class EventManager {
 	}
 
 	/**
+	 * Re-queue a previously collected change, e.g. a folder rename/delete
+	 * that failed and must be retried on the next sync.
+	 */
+	addDirtyChange(change: LocalChange): void {
+		this.dirtyFiles.set(change.path, change);
+	}
+
+	/**
 	 * Start listening to vault events
 	 */
 	startListening(): void {

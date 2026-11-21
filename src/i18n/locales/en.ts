@@ -71,6 +71,8 @@ export const en = {
 			noFilesToSync: 'Koofr sync: No files to sync. Edit or create files first.',
 			deviceTypeSyncHint:
 				'Tip: "Sync app settings" and "Sync plugins" are disabled by default. Enable them only for similar device types (desktop↔desktop or mobile↔mobile), otherwise shortcuts/layout/plugins can conflict.',
+			folderChangesFailed:
+				"Koofr sync: {{count}} folder change(s) couldn't be applied on Koofr. See the log.",
 			file: 'file',
 			files: 'files',
 			conflict: 'conflict',

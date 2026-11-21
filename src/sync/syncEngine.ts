@@ -128,6 +128,12 @@ interface SyncExecutionResult {
 	conflictedPaths: string[];
 }
 
+interface FolderChangesResult {
+	failedCount: number;
+	// Failed renames/deletes to re-queue for the next sync
+	retry: LocalChange[];
+}
+
 /**
  * Main sync engine
  */
@@ -266,7 +272,7 @@ export class SyncEngine {
 				await this.deleteCloudDeletedFolders(deletedFolderPaths);
 			}
 
-			await this.processFolderChanges(folderChanges);
+			const folderResult = await this.processFolderChanges(folderChanges);
 
 			// Prune remote config folders (.obsidian/plugins/*) left empty
 			// after local-driven file deletes.
@@ -281,6 +287,13 @@ export class SyncEngine {
 			this.eventManager.clearDirtyFiles();
 			for (const path of conflictedPaths) {
 				this.eventManager.addDirtyFile(path, 'modify');
+			}
+			// Failed folder renames/deletes can't be rediscovered later, so keep them queued
+			for (const change of folderResult.retry) {
+				this.eventManager.addDirtyChange(change);
+			}
+			if (folderResult.failedCount > 0) {
+				new Notice(t('notices.sync.folderChangesFailed', { count: folderResult.failedCount }));
 			}
 
 			logger.debug('Sync operations finished');
@@ -1248,8 +1261,10 @@ export class SyncEngine {
 	/**
 	 * Process explicit folder create/delete/rename events from the vault.
 	 */
-	private async processFolderChanges(folderChanges: LocalChange[]): Promise<void> {
-		if (folderChanges.length === 0) return;
+	private async processFolderChanges(folderChanges: LocalChange[]): Promise<FolderChangesResult> {
+		const result: FolderChangesResult = { failedCount: 0, retry: [] };
+		if (folderChanges.length === 0) return result;
+		const failedCreatePaths: string[] = [];
 
 		const creates = folderChanges
 			.filter((c) => c.type === LocalChangeType.FOLDER_CREATE)
@@ -1282,16 +1297,32 @@ export class SyncEngine {
 				logger.info(`Renamed remote folder: ${oldPath} → ${change.path}`);
 			} catch (error) {
 				logger.error(`Failed to rename remote folder ${oldPath} → ${change.path}:`, error);
+				result.failedCount++;
+				result.retry.push(change);
 			}
 		}
 
 		for (const change of creates) {
+			// A create under a failed ancestor would only repeat the ancestor's failure
+			const ancestorFailed = failedCreatePaths.some((failed) =>
+				change.path.startsWith(`${failed}/`)
+			);
+			if (ancestorFailed) {
+				logger.warn(`Skipping remote folder create ${change.path}: ancestor create failed`);
+				result.failedCount++;
+				failedCreatePaths.push(change.path);
+				continue;
+			}
+
 			try {
 				await this.fileOps.createFolder(this.vaultPathToRemotePath(change.path));
 				this.stateManager.addFolderPath(change.path);
 				logger.info(`Created remote folder: ${change.path}`);
 			} catch (error) {
-				logger.warn(`Failed to create remote folder ${change.path}:`, error);
+				// Not retried: untracked local folders are rediscovered on every sync
+				logger.error(`Failed to create remote folder ${change.path}:`, error);
+				result.failedCount++;
+				failedCreatePaths.push(change.path);
 			}
 		}
 
@@ -1301,11 +1332,13 @@ export class SyncEngine {
 				this.stateManager.removeFolderPath(change.path);
 				logger.info(`Deleted remote folder: ${change.path}`);
 			} catch (error) {
-				logger.debug(
-					`Could not delete remote folder ${change.path}: ${error instanceof Error ? error.message : error}`
-				);
+				logger.error(`Failed to delete remote folder ${change.path}:`, error);
+				result.failedCount++;
+				result.retry.push(change);
 			}
 		}
+
+		return result;
 	}
 
 	/**
