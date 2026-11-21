@@ -1527,7 +1527,8 @@ export class SyncEngine {
 			new Notice(t('notices.reconcile.listing'), 6000);
 			const ignoreMatchers = await this.loadIgnoreMatchers();
 
-			const { remoteFiles, localByPath } = await this.collectReconcileInventory(ignoreMatchers);
+			const { remoteFiles, remoteFolderVaultPaths, localByPath } =
+				await this.collectReconcileInventory(ignoreMatchers);
 
 			this.stateManager.clearFileStates();
 
