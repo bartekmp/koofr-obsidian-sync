@@ -280,6 +280,22 @@ export class KoofrSettingTab extends PluginSettingTab {
 				})
 			);
 
+		// Delay before syncing file changes
+		new Setting(containerEl)
+			.setName(t('settings.sync.changeDelay.name'))
+			.setDesc(t('settings.sync.changeDelay.desc'))
+			.addDropdown((dropdown) => {
+				for (const seconds of [3, 5, 10, 30, 60]) {
+					dropdown.addOption(String(seconds), t('settings.sync.changeDelay.seconds', { seconds }));
+				}
+				dropdown
+					.setValue(String(this.plugin.settings.syncOnChangeDelay))
+					.onChange(async (value) => {
+						this.plugin.settings.syncOnChangeDelay = parseInt(value);
+						await this.plugin.saveSettings();
+					});
+			});
+
 		// Startup sync delay
 		new Setting(containerEl)
 			.setName(t('settings.sync.startupDelay.name'))

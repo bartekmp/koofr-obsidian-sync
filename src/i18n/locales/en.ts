@@ -213,6 +213,11 @@ export const en = {
 				name: 'Sync on file change',
 				desc: 'Automatically sync when files are modified. Disable to prevent syncing while actively editing — only the periodic interval and manual sync will run.',
 			},
+			changeDelay: {
+				name: 'Delay before syncing changes',
+				desc: 'How long to wait after your last edit before auto-syncing. Longer means fewer syncs while typing.',
+				seconds: '{{seconds}} seconds',
+			},
 			startupDelay: {
 				name: 'Startup sync delay',
 				desc: 'Delay before first sync after Obsidian starts (0 = disabled)',
