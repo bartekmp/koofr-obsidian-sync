@@ -1064,7 +1064,10 @@ export class SyncEngine {
 			return;
 		}
 
-		const content = await this.fileOps.downloadFile(this.vaultPathToRemotePath(operation.path));
+		const content = await this.fileOps.downloadFile(
+			this.vaultPathToRemotePath(operation.path),
+			operation.remoteState.size
+		);
 
 		await this.ensureVaultFolders(operation.path);
 

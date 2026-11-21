@@ -60,9 +60,9 @@ export class FileOperations {
 	/**
 	 * Download a file from Koofr
 	 */
-	async downloadFile(remotePath: string): Promise<ArrayBuffer> {
+	async downloadFile(remotePath: string, size?: number): Promise<ArrayBuffer> {
 		logger.debug('Downloading file:', remotePath);
-		return this.client.downloadFile(remotePath);
+		return this.client.downloadFile(remotePath, size);
 	}
 
 	/**

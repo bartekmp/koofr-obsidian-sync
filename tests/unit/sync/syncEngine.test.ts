@@ -112,7 +112,7 @@ describe('SyncEngine', () => {
 			const engine = makeEngine();
 			await engine.performSync();
 
-			expect(fileOps.downloadFile).toHaveBeenCalledWith('/note.md');
+			expect(fileOps.downloadFile).toHaveBeenCalledWith('/note.md', 5);
 			expect(mockApp.vault.adapter.writeBinary).toHaveBeenCalledWith(
 				'note.md',
 				expect.any(ArrayBuffer)
