@@ -105,6 +105,7 @@ export default class KoofrSyncPlugin extends Plugin {
 	private currentSyncStatus: SyncStatus = SyncStatus.DISCONNECTED;
 	private currentProgressMessage?: string;
 	private mobileProgressNotice?: Notice;
+	private lastSavedSettings?: string;
 
 	async onload() {
 		logger.info('Loading Koofr Sync plugin');
@@ -275,6 +276,8 @@ export default class KoofrSyncPlugin extends Plugin {
 					)
 			);
 			this.eventManager.setPullOnlyModeCheck(() => this.getExperimentalSetting('pullOnlyMode'));
+			this.eventManager.setSyncOnFileChange(this.settings.syncOnFileChange ?? true);
+			this.eventManager.setChangeSyncDelay(this.settings.syncOnChangeDelay);
 
 			this.conflictQueue = new ConflictQueue(
 				this.app,
@@ -883,12 +886,18 @@ export default class KoofrSyncPlugin extends Plugin {
 
 		if (this.eventManager) {
 			this.eventManager.setSyncOnFileChange(this.settings.syncOnFileChange ?? true);
+			this.eventManager.setChangeSyncDelay(this.settings.syncOnChangeDelay);
 		}
 
 		this.applyLogLevel();
 		this.applyVaultLogHook();
 
+		// Skip the disk write when nothing changed — rewriting data.json bumps its
+		// mtime and can retrigger sync-on-change.
+		const serialized = JSON.stringify(this.settings);
+		if (serialized === this.lastSavedSettings) return;
 		await this.saveData(this.settings);
+		this.lastSavedSettings = serialized;
 	}
 
 	private static readonly LOG_LEVEL_MAP: Record<string, LogLevel> = {
