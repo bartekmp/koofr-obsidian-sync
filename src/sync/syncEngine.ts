@@ -361,6 +361,9 @@ export class SyncEngine {
 		const configChanges = await this.detectConfigFileChanges(ignoreMatchers);
 		localChanges.push(...configChanges);
 
+		const externalChanges = this.detectExternalVaultChanges(ignoreMatchers, localChanges);
+		localChanges.push(...externalChanges);
+
 		logger.info(
 			`Local changes: ${localChanges.length} dirty files (${configChanges.length} config), ${folderChanges.length} folder operations`
 		);
@@ -415,6 +418,38 @@ export class SyncEngine {
 		traverseFolderTree(root);
 
 		return discovered;
+	}
+
+	/**
+	 * Detect tracked vault files modified outside Obsidian's file events
+	 * (other apps editing the vault folder, edits made while Obsidian was
+	 * closed) by comparing current mtime/size against the last-synced state.
+	 */
+	private detectExternalVaultChanges(
+		ignoreMatchers: RegExp[],
+		alreadyChanged: LocalChange[]
+	): LocalChange[] {
+		const changes: LocalChange[] = [];
+		const knownPaths = new Set<string>(alreadyChanged.map((c) => c.path));
+		for (const dirty of this.eventManager.getDirtyFiles()) knownPaths.add(dirty.path);
+
+		for (const file of this.app.vault.getFiles()) {
+			const path = file.path;
+			if (knownPaths.has(path)) continue;
+			if (!this.shouldSyncPath(path)) continue;
+			if (this.shouldIgnorePath(path, ignoreMatchers)) continue;
+			if (this.eventManager.isOwnWrite(path)) continue;
+
+			const trackedState = this.stateManager.getFileState(path);
+			// localMtime 0 means "unknown" (e.g. after a remote move) — can't compare
+			if (!trackedState || !trackedState.localMtime) continue;
+
+			if (file.stat.mtime !== trackedState.localMtime || file.stat.size !== trackedState.size) {
+				logger.debug(`Detected external change: ${path}`);
+				changes.push({ path, type: LocalChangeType.MODIFY });
+			}
+		}
+		return changes;
 	}
 
 	/**

@@ -142,6 +142,29 @@ describe('SyncEngine', () => {
 			expect(fileOps.uploadFile).not.toHaveBeenCalled();
 			expect(fileOps.downloadFile).not.toHaveBeenCalled();
 		});
+
+		it('uploads a tracked file edited outside Obsidian (no vault event)', async () => {
+			stateManager.setLastSyncTime(Date.now());
+			stateManager.setFileState('note.md', {
+				path: 'note.md',
+				localMtime: 1000,
+				remoteHash: 'h1',
+				size: 5,
+				remoteModifiedTime: 1000,
+			});
+			fileOps.listAllItems.mockResolvedValue([
+				{ name: 'note.md', type: 'file', modified: 1000, size: 5, hash: 'h1', path: '/note.md' },
+			]);
+			const edited = makeTFile('note.md', 12, 9000);
+			mockApp.vault.getFiles.mockReturnValue([edited]);
+			mockApp.vault.getAbstractFileByPath.mockReturnValue(edited);
+			mockApp.vault.readBinary.mockResolvedValue(new TextEncoder().encode('edited').buffer);
+			fileOps.uploadFile.mockResolvedValue({ hash: 'h2', modified: 9000 });
+
+			await makeEngine().performSync();
+
+			expect(fileOps.uploadFile).toHaveBeenCalledWith('/note.md', expect.any(ArrayBuffer), 9000);
+		});
 	});
 
 	describe('local delete', () => {
