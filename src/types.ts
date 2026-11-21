@@ -105,6 +105,8 @@ export interface SyncOperation {
 	remoteState?: FileState;
 	// For MOVE operations: the remote path being moved from
 	moveFromPath?: string;
+	// For create-duplicate conflicts: local path where the remote version is saved
+	conflictCopyPath?: string;
 }
 
 export interface LargeDeleteWarningInfo {

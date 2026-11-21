@@ -262,6 +262,49 @@ describe('SyncEngine', () => {
 			expect(fileOps.uploadFile).not.toHaveBeenCalled();
 		});
 
+		it('create-duplicate saves the remote version as a copy and uploads the local one', async () => {
+			conflictResolver.setStrategy(ConflictResolutionStrategy.CREATE_DUPLICATE);
+			stateManager.setLastSyncTime(Date.now());
+			stateManager.setFileState('note.md', {
+				path: 'note.md',
+				localMtime: 1000,
+				remoteHash: 'old-hash',
+				size: 5,
+				remoteModifiedTime: 1000,
+			});
+			eventManager.getDirtyFiles = vi
+				.fn()
+				.mockReturnValue([{ path: 'note.md', type: LocalChangeType.MODIFY }]);
+			fileOps.listAllItems.mockResolvedValue([
+				{
+					name: 'note.md',
+					type: 'file',
+					modified: 5000,
+					size: 20,
+					hash: 'new-hash',
+					path: '/note.md',
+				},
+			]);
+			mockApp.vault.getAbstractFileByPath.mockReturnValue(makeTFile('note.md', 12, 9000));
+			mockApp.vault.readBinary.mockResolvedValue(new TextEncoder().encode('local content').buffer);
+			fileOps.downloadFile.mockResolvedValue(new TextEncoder().encode('remote content').buffer);
+			fileOps.uploadFile.mockResolvedValue({ hash: 'uploaded-hash', modified: 9000 });
+
+			await makeEngine().performSync();
+
+			// Remote version is fetched from the ORIGINAL remote path...
+			expect(fileOps.downloadFile).toHaveBeenCalledWith('/note.md');
+			// ...and written to a dated copy, not over the base file
+			const writtenPaths = mockApp.vault.adapter.writeBinary.mock.calls.map((c) => c[0]);
+			expect(writtenPaths).toHaveLength(1);
+			expect(writtenPaths[0]).toMatch(/^note \(conflict .*\)\.md$/);
+			// Local version wins on the remote and base state is refreshed,
+			// so the conflict is not re-detected on the next sync
+			expect(fileOps.uploadFile).toHaveBeenCalledWith('/note.md', expect.any(ArrayBuffer), 9000);
+			expect(stateManager.getFileState('note.md')?.remoteHash).toBe('uploaded-hash');
+			expect(stateManager.getFileState(writtenPaths[0] as string)).toBeUndefined();
+		});
+
 		it('treats a hash-unchanged remote echo as a plain upload, not a conflict', async () => {
 			conflictResolver.setStrategy(ConflictResolutionStrategy.MANUAL);
 			stateManager.setLastSyncTime(Date.now());

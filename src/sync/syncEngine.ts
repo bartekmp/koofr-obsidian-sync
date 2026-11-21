@@ -710,7 +710,8 @@ export class SyncEngine {
 					};
 					const resolution = this.conflictResolver.resolveConflict(conflictInfo);
 					operations.push({
-						path: resolution.newPath || change.path,
+						path: change.path,
+						conflictCopyPath: resolution.newPath,
 						direction: resolution.direction,
 						localState: knownState,
 						remoteState: this.itemToFileState(remoteItem),
@@ -837,6 +838,8 @@ export class SyncEngine {
 			} else if (operation.direction === SyncDirection.DOWNLOAD) {
 				if (operation.remoteState === undefined) {
 					await this.deleteLocalFile(operation.path);
+				} else if (operation.conflictCopyPath) {
+					await this.saveConflictCopy(operation, operation.conflictCopyPath);
 				} else {
 					await this.downloadFile(operation);
 				}
@@ -1063,6 +1066,30 @@ export class SyncEngine {
 		});
 
 		logger.debug(`Downloaded ${operation.path} successfully`);
+	}
+
+	/**
+	 * Create-duplicate conflict: keep the remote version as a local copy,
+	 * then upload the local version so the base file's tracked state matches
+	 * Koofr. Without that, the conflict would be re-detected on every sync.
+	 * The copy itself is not tracked; the next sync uploads it as a new file.
+	 */
+	private async saveConflictCopy(operation: SyncOperation, copyPath: string): Promise<void> {
+		const remoteContent = await this.fileOps.downloadFile(
+			this.vaultPathToRemotePath(operation.path)
+		);
+
+		await this.ensureVaultFolders(copyPath);
+		this.eventManager.markOwnWrites([copyPath]);
+		try {
+			await this.app.vault.adapter.writeBinary(copyPath, remoteContent);
+		} catch (error) {
+			this.eventManager.removeOwnWrite(copyPath);
+			throw error;
+		}
+		logger.info(`Saved remote version of ${operation.path} as ${copyPath}`);
+
+		await this.uploadFile({ path: operation.path, direction: SyncDirection.UPLOAD });
 	}
 
 	/**
