@@ -30,6 +30,8 @@ export class EventManager {
 	private initialSyncDone = false;
 	// When false, vault change events mark files dirty but do not schedule auto-sync
 	private syncOnFileChange = true;
+	// Quiet period after the last edit before an auto-sync fires
+	private changeSyncDelayMs: number = SYNC_CONFIG.EVENT_THROTTLE_MS;
 	// Callback to check if pull-only mode is enabled
 	private isPullOnlyMode: () => boolean = () => false;
 
@@ -110,6 +112,13 @@ export class EventManager {
 	}
 
 	/**
+	 * Set how long to wait after the last file change before auto-syncing.
+	 */
+	setChangeSyncDelay(seconds: number): void {
+		this.changeSyncDelayMs = seconds > 0 ? seconds * 1000 : SYNC_CONFIG.EVENT_THROTTLE_MS;
+	}
+
+	/**
 	 * Get dirty files without clearing them.
 	 * Call clearDirtyFiles() after successful sync.
 	 */
@@ -139,6 +148,14 @@ export class EventManager {
 	addDirtyFile(path: string, type: 'modify' | 'create'): void {
 		const changeType = type === 'create' ? LocalChangeType.CREATE : LocalChangeType.MODIFY;
 		this.dirtyFiles.set(path, { path, type: changeType });
+	}
+
+	/**
+	 * Re-queue a previously collected change, e.g. a folder rename/delete
+	 * that failed and must be retried on the next sync.
+	 */
+	addDirtyChange(change: LocalChange): void {
+		this.dirtyFiles.set(change.path, change);
 	}
 
 	/**
@@ -287,7 +304,7 @@ export class EventManager {
 
 		this.throttleTimer = timerApi.setTimeout(() => {
 			void this.executeSync();
-		}, SYNC_CONFIG.EVENT_THROTTLE_MS);
+		}, this.changeSyncDelayMs);
 	}
 
 	/**

@@ -33,13 +33,14 @@ import { logger } from '../utils/logger';
 import { retryWithBackoff } from '../utils/retry';
 import { parseHttpError } from '../utils/errors';
 import { normalizePath, getParentPath, getFileName } from '../utils/pathUtils';
-import { KOOFR_API_V2, KOOFR_CONTENT_API_V2 } from '../constants';
+import { KOOFR_API_V2, KOOFR_CONTENT_API_V2, SYNC_CONFIG } from '../constants';
 
 interface KoofrHttpResponse {
 	status: number;
 	text: string;
 	json: unknown;
 	arrayBuffer: ArrayBuffer;
+	headers?: Record<string, string>;
 }
 
 interface FilesListResponse {
@@ -290,7 +291,11 @@ export class KoofrClient {
 	// File operations
 	// ------------------------------------------------------------------
 
-	async downloadFile(path: string): Promise<ArrayBuffer> {
+	/**
+	 * Download a file. When `size` is above the chunk threshold the file is
+	 * fetched with HTTP Range requests to keep peak memory low on mobile.
+	 */
+	async downloadFile(path: string, size?: number): Promise<ArrayBuffer> {
 		const mountId = this.requireMountId();
 		const remotePath = this.normalizeRemotePath(path);
 		logger.debug('Downloading file:', remotePath);
@@ -299,6 +304,9 @@ export class KoofrClient {
 			const url = this.buildUrl(`${KOOFR_CONTENT_API_V2}/mounts/${mountId}/files/get`, {
 				path: remotePath,
 			});
+			if (size !== undefined && size > SYNC_CONFIG.DOWNLOAD_CHUNK_BYTES) {
+				return await this.downloadInChunks(url, size);
+			}
 			const response = await this.request(url, { method: 'GET' });
 			return response.arrayBuffer;
 		} catch (error) {
@@ -307,6 +315,34 @@ export class KoofrClient {
 				`Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`
 			);
 		}
+	}
+
+	private async downloadInChunks(url: string, size: number): Promise<ArrayBuffer> {
+		const chunkSize = SYNC_CONFIG.DOWNLOAD_CHUNK_BYTES;
+		const result = new Uint8Array(size);
+		let offset = 0;
+
+		while (offset < size) {
+			const end = Math.min(offset + chunkSize, size) - 1;
+			const response = await this.request(url, {
+				method: 'GET',
+				headers: { Range: `bytes=${offset}-${end}` },
+			});
+
+			// Server ignored the Range header and sent the whole file
+			if (response.status === 200) {
+				return response.arrayBuffer;
+			}
+
+			const chunk = new Uint8Array(response.arrayBuffer);
+			if (chunk.byteLength === 0) {
+				throw new Error(`Empty chunk at offset ${offset}`);
+			}
+			result.set(chunk.subarray(0, size - offset), offset);
+			offset += chunk.byteLength;
+		}
+
+		return result.buffer;
 	}
 
 	/**

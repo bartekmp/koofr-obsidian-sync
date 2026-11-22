@@ -27,6 +27,7 @@ interface KoofrPlugin {
 	onCssSnippetSyncChanged(enabled: boolean): Promise<void>;
 	resetSyncToken(): Promise<void>;
 	reconcileFromCloud(): Promise<void>;
+	reconcileToCloud(): Promise<void>;
 	authenticate(email: string, appPassword: string): Promise<void>;
 	testConnection(): Promise<void>;
 	disconnect(): void;
@@ -280,6 +281,22 @@ export class KoofrSettingTab extends PluginSettingTab {
 				})
 			);
 
+		// Delay before syncing file changes
+		new Setting(containerEl)
+			.setName(t('settings.sync.changeDelay.name'))
+			.setDesc(t('settings.sync.changeDelay.desc'))
+			.addDropdown((dropdown) => {
+				for (const seconds of [3, 5, 10, 30, 60]) {
+					dropdown.addOption(String(seconds), t('settings.sync.changeDelay.seconds', { seconds }));
+				}
+				dropdown
+					.setValue(String(this.plugin.settings.syncOnChangeDelay))
+					.onChange(async (value) => {
+						this.plugin.settings.syncOnChangeDelay = parseInt(value);
+						await this.plugin.saveSettings();
+					});
+			});
+
 		// Startup sync delay
 		new Setting(containerEl)
 			.setName(t('settings.sync.startupDelay.name'))
@@ -491,6 +508,16 @@ export class KoofrSettingTab extends PluginSettingTab {
 			.addButton((button) =>
 				button.setButtonText(t('settings.advanced.reconcileFromCloud.button')).onClick(async () => {
 					await this.plugin.reconcileFromCloud();
+				})
+			);
+
+		// Force upload local → cloud (local-as-truth recovery)
+		new Setting(containerEl)
+			.setName(t('settings.advanced.reconcileToCloud.name'))
+			.setDesc(t('settings.advanced.reconcileToCloud.desc'))
+			.addButton((button) =>
+				button.setButtonText(t('settings.advanced.reconcileToCloud.button')).onClick(async () => {
+					await this.plugin.reconcileToCloud();
 				})
 			);
 	}

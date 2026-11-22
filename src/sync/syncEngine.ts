@@ -128,6 +128,12 @@ interface SyncExecutionResult {
 	conflictedPaths: string[];
 }
 
+interface FolderChangesResult {
+	failedCount: number;
+	// Failed renames/deletes to re-queue for the next sync
+	retry: LocalChange[];
+}
+
 /**
  * Main sync engine
  */
@@ -266,7 +272,7 @@ export class SyncEngine {
 				await this.deleteCloudDeletedFolders(deletedFolderPaths);
 			}
 
-			await this.processFolderChanges(folderChanges);
+			const folderResult = await this.processFolderChanges(folderChanges);
 
 			// Prune remote config folders (.obsidian/plugins/*) left empty
 			// after local-driven file deletes.
@@ -281,6 +287,13 @@ export class SyncEngine {
 			this.eventManager.clearDirtyFiles();
 			for (const path of conflictedPaths) {
 				this.eventManager.addDirtyFile(path, 'modify');
+			}
+			// Failed folder renames/deletes can't be rediscovered later, so keep them queued
+			for (const change of folderResult.retry) {
+				this.eventManager.addDirtyChange(change);
+			}
+			if (folderResult.failedCount > 0) {
+				new Notice(t('notices.sync.folderChangesFailed', { count: folderResult.failedCount }));
 			}
 
 			logger.debug('Sync operations finished');
@@ -361,6 +374,9 @@ export class SyncEngine {
 		const configChanges = await this.detectConfigFileChanges(ignoreMatchers);
 		localChanges.push(...configChanges);
 
+		const externalChanges = this.detectExternalVaultChanges(ignoreMatchers, localChanges);
+		localChanges.push(...externalChanges);
+
 		logger.info(
 			`Local changes: ${localChanges.length} dirty files (${configChanges.length} config), ${folderChanges.length} folder operations`
 		);
@@ -415,6 +431,38 @@ export class SyncEngine {
 		traverseFolderTree(root);
 
 		return discovered;
+	}
+
+	/**
+	 * Detect tracked vault files modified outside Obsidian's file events
+	 * (other apps editing the vault folder, edits made while Obsidian was
+	 * closed) by comparing current mtime/size against the last-synced state.
+	 */
+	private detectExternalVaultChanges(
+		ignoreMatchers: RegExp[],
+		alreadyChanged: LocalChange[]
+	): LocalChange[] {
+		const changes: LocalChange[] = [];
+		const knownPaths = new Set<string>(alreadyChanged.map((c) => c.path));
+		for (const dirty of this.eventManager.getDirtyFiles()) knownPaths.add(dirty.path);
+
+		for (const file of this.app.vault.getFiles()) {
+			const path = file.path;
+			if (knownPaths.has(path)) continue;
+			if (!this.shouldSyncPath(path)) continue;
+			if (this.shouldIgnorePath(path, ignoreMatchers)) continue;
+			if (this.eventManager.isOwnWrite(path)) continue;
+
+			const trackedState = this.stateManager.getFileState(path);
+			// localMtime 0 means "unknown" (e.g. after a remote move) — can't compare
+			if (!trackedState || !trackedState.localMtime) continue;
+
+			if (file.stat.mtime !== trackedState.localMtime || file.stat.size !== trackedState.size) {
+				logger.debug(`Detected external change: ${path}`);
+				changes.push({ path, type: LocalChangeType.MODIFY });
+			}
+		}
+		return changes;
 	}
 
 	/**
@@ -710,7 +758,8 @@ export class SyncEngine {
 					};
 					const resolution = this.conflictResolver.resolveConflict(conflictInfo);
 					operations.push({
-						path: resolution.newPath || change.path,
+						path: change.path,
+						conflictCopyPath: resolution.newPath,
 						direction: resolution.direction,
 						localState: knownState,
 						remoteState: this.itemToFileState(remoteItem),
@@ -837,6 +886,8 @@ export class SyncEngine {
 			} else if (operation.direction === SyncDirection.DOWNLOAD) {
 				if (operation.remoteState === undefined) {
 					await this.deleteLocalFile(operation.path);
+				} else if (operation.conflictCopyPath) {
+					await this.saveConflictCopy(operation, operation.conflictCopyPath);
 				} else {
 					await this.downloadFile(operation);
 				}
@@ -1026,7 +1077,10 @@ export class SyncEngine {
 			return;
 		}
 
-		const content = await this.fileOps.downloadFile(this.vaultPathToRemotePath(operation.path));
+		const content = await this.fileOps.downloadFile(
+			this.vaultPathToRemotePath(operation.path),
+			operation.remoteState.size
+		);
 
 		await this.ensureVaultFolders(operation.path);
 
@@ -1063,6 +1117,30 @@ export class SyncEngine {
 		});
 
 		logger.debug(`Downloaded ${operation.path} successfully`);
+	}
+
+	/**
+	 * Create-duplicate conflict: keep the remote version as a local copy,
+	 * then upload the local version so the base file's tracked state matches
+	 * Koofr. Without that, the conflict would be re-detected on every sync.
+	 * The copy itself is not tracked; the next sync uploads it as a new file.
+	 */
+	private async saveConflictCopy(operation: SyncOperation, copyPath: string): Promise<void> {
+		const remoteContent = await this.fileOps.downloadFile(
+			this.vaultPathToRemotePath(operation.path)
+		);
+
+		await this.ensureVaultFolders(copyPath);
+		this.eventManager.markOwnWrites([copyPath]);
+		try {
+			await this.app.vault.adapter.writeBinary(copyPath, remoteContent);
+		} catch (error) {
+			this.eventManager.removeOwnWrite(copyPath);
+			throw error;
+		}
+		logger.info(`Saved remote version of ${operation.path} as ${copyPath}`);
+
+		await this.uploadFile({ path: operation.path, direction: SyncDirection.UPLOAD });
 	}
 
 	/**
@@ -1183,8 +1261,10 @@ export class SyncEngine {
 	/**
 	 * Process explicit folder create/delete/rename events from the vault.
 	 */
-	private async processFolderChanges(folderChanges: LocalChange[]): Promise<void> {
-		if (folderChanges.length === 0) return;
+	private async processFolderChanges(folderChanges: LocalChange[]): Promise<FolderChangesResult> {
+		const result: FolderChangesResult = { failedCount: 0, retry: [] };
+		if (folderChanges.length === 0) return result;
+		const failedCreatePaths: string[] = [];
 
 		const creates = folderChanges
 			.filter((c) => c.type === LocalChangeType.FOLDER_CREATE)
@@ -1217,16 +1297,32 @@ export class SyncEngine {
 				logger.info(`Renamed remote folder: ${oldPath} → ${change.path}`);
 			} catch (error) {
 				logger.error(`Failed to rename remote folder ${oldPath} → ${change.path}:`, error);
+				result.failedCount++;
+				result.retry.push(change);
 			}
 		}
 
 		for (const change of creates) {
+			// A create under a failed ancestor would only repeat the ancestor's failure
+			const ancestorFailed = failedCreatePaths.some((failed) =>
+				change.path.startsWith(`${failed}/`)
+			);
+			if (ancestorFailed) {
+				logger.warn(`Skipping remote folder create ${change.path}: ancestor create failed`);
+				result.failedCount++;
+				failedCreatePaths.push(change.path);
+				continue;
+			}
+
 			try {
 				await this.fileOps.createFolder(this.vaultPathToRemotePath(change.path));
 				this.stateManager.addFolderPath(change.path);
 				logger.info(`Created remote folder: ${change.path}`);
 			} catch (error) {
-				logger.warn(`Failed to create remote folder ${change.path}:`, error);
+				// Not retried: untracked local folders are rediscovered on every sync
+				logger.error(`Failed to create remote folder ${change.path}:`, error);
+				result.failedCount++;
+				failedCreatePaths.push(change.path);
 			}
 		}
 
@@ -1236,11 +1332,13 @@ export class SyncEngine {
 				this.stateManager.removeFolderPath(change.path);
 				logger.info(`Deleted remote folder: ${change.path}`);
 			} catch (error) {
-				logger.debug(
-					`Could not delete remote folder ${change.path}: ${error instanceof Error ? error.message : error}`
-				);
+				logger.error(`Failed to delete remote folder ${change.path}:`, error);
+				result.failedCount++;
+				result.retry.push(change);
 			}
 		}
+
+		return result;
 	}
 
 	/**
@@ -1351,6 +1449,61 @@ export class SyncEngine {
 	}
 
 	/**
+	 * Enumerate syncable remote files/folders and local files (incl. config
+	 * files) for the recovery operations.
+	 */
+	private async collectReconcileInventory(ignoreMatchers: RegExp[]): Promise<{
+		remoteFiles: Map<string, KoofrFileInfo>;
+		remoteFolderVaultPaths: Set<string>;
+		localByPath: Map<string, { path: string; size: number }>;
+	}> {
+		const allRemoteItems = await this.fileOps.listAllItems(this.remoteRoot);
+		logger.info(`Reconcile: enumerated ${allRemoteItems.length} remote items`);
+
+		const remoteFiles = new Map<string, KoofrFileInfo>();
+		const remoteFolderVaultPaths = new Set<string>();
+		for (const item of allRemoteItems) {
+			const vaultPath = this.remotePathToVaultPath(item.path);
+			if (!vaultPath) continue;
+			if (!this.shouldSyncPath(vaultPath)) continue;
+			if (this.shouldIgnorePath(vaultPath, ignoreMatchers)) continue;
+			if (item.type === 'dir') {
+				remoteFolderVaultPaths.add(vaultPath);
+			} else {
+				remoteFiles.set(vaultPath, item);
+			}
+		}
+
+		const localFiles = this.app.vault
+			.getFiles()
+			.filter((f) => this.shouldSyncPath(f.path))
+			.filter((f) => !this.shouldIgnorePath(f.path, ignoreMatchers));
+		const localByPath = new Map<string, { path: string; size: number }>(
+			localFiles.map((f) => [f.path, { path: f.path, size: f.stat.size }])
+		);
+
+		const adapter = this.app.vault.adapter;
+		const configPaths = await getAllSyncableConfigPaths(this.configDir, adapter, (path) =>
+			this.shouldSyncPath(path)
+		);
+		for (const path of configPaths) {
+			if (localByPath.has(path)) continue;
+			if (!this.shouldSyncPath(path)) continue;
+			if (this.shouldIgnorePath(path, ignoreMatchers)) continue;
+			try {
+				const stat = await adapter.stat(path);
+				if (stat && stat.type === 'file') {
+					localByPath.set(path, { path, size: stat.size });
+				}
+			} catch {
+				// file doesn't exist, skip
+			}
+		}
+
+		return { remoteFiles, remoteFolderVaultPaths, localByPath };
+	}
+
+	/**
 	 * Reconcile the local vault from a full cloud listing. Treats cloud as
 	 * authoritative: any local file not present in cloud is deleted; any
 	 * cloud file not present locally is downloaded; size mismatches are
@@ -1374,48 +1527,8 @@ export class SyncEngine {
 			new Notice(t('notices.reconcile.listing'), 6000);
 			const ignoreMatchers = await this.loadIgnoreMatchers();
 
-			const allRemoteItems = await this.fileOps.listAllItems(this.remoteRoot);
-			logger.info(`Reconcile: enumerated ${allRemoteItems.length} remote items`);
-
-			const remoteFiles = new Map<string, KoofrFileInfo>();
-			const remoteFolderVaultPaths = new Set<string>();
-			for (const item of allRemoteItems) {
-				const vaultPath = this.remotePathToVaultPath(item.path);
-				if (!vaultPath) continue;
-				if (!this.shouldSyncPath(vaultPath)) continue;
-				if (this.shouldIgnorePath(vaultPath, ignoreMatchers)) continue;
-				if (item.type === 'dir') {
-					remoteFolderVaultPaths.add(vaultPath);
-				} else {
-					remoteFiles.set(vaultPath, item);
-				}
-			}
-
-			const localFiles = this.app.vault
-				.getFiles()
-				.filter((f) => this.shouldSyncPath(f.path))
-				.filter((f) => !this.shouldIgnorePath(f.path, ignoreMatchers));
-			const localByPath = new Map<string, { path: string; size: number }>(
-				localFiles.map((f) => [f.path, { path: f.path, size: f.stat.size }])
-			);
-
-			const adapter = this.app.vault.adapter;
-			const configPaths = await getAllSyncableConfigPaths(this.configDir, adapter, (path) =>
-				this.shouldSyncPath(path)
-			);
-			for (const path of configPaths) {
-				if (localByPath.has(path)) continue;
-				if (!this.shouldSyncPath(path)) continue;
-				if (this.shouldIgnorePath(path, ignoreMatchers)) continue;
-				try {
-					const stat = await adapter.stat(path);
-					if (stat && stat.type === 'file') {
-						localByPath.set(path, { path, size: stat.size });
-					}
-				} catch {
-					// file doesn't exist, skip
-				}
-			}
+			const { remoteFiles, remoteFolderVaultPaths, localByPath } =
+				await this.collectReconcileInventory(ignoreMatchers);
 
 			this.stateManager.clearFileStates();
 
@@ -1518,6 +1631,114 @@ export class SyncEngine {
 			);
 		} catch (error) {
 			logger.error('Reconcile from cloud failed:', error);
+			new Notice(t('notices.reconcile.failed', { message: String(error) }));
+			throw error;
+		}
+	}
+
+	/**
+	 * Inverse of reconcileFromCloud: treat the local vault as authoritative.
+	 * Local-only and size-mismatched files are uploaded; files that exist only
+	 * on Koofr are deleted. Destructive remote deletes are gated by the same
+	 * large-delete confirmation as normal sync.
+	 */
+	async reconcileToCloud(): Promise<void> {
+		logger.info('Starting reconcile-to-cloud operation');
+		const progress = (msg: string | undefined) => {
+			try {
+				this.onProgress?.(msg);
+			} catch {
+				// progress reporting must never break sync
+			}
+		};
+
+		try {
+			progress(t('progress.listingCloud'));
+			new Notice(t('notices.reconcile.listing'), 6000);
+			const ignoreMatchers = await this.loadIgnoreMatchers();
+			const { remoteFiles, localByPath } = await this.collectReconcileInventory(ignoreMatchers);
+
+			this.stateManager.clearFileStates();
+
+			const operations: SyncOperation[] = [];
+			const toUpload: string[] = [];
+			const toDelete: string[] = [];
+			const toRefresh: string[] = [];
+
+			for (const [path, local] of localByPath) {
+				const remote = remoteFiles.get(path);
+				if (!remote) {
+					toUpload.push(path);
+					operations.push({ path, direction: SyncDirection.UPLOAD });
+				} else if (local.size !== (remote.size || 0)) {
+					toRefresh.push(path);
+					operations.push({ path, direction: SyncDirection.UPLOAD });
+				} else {
+					this.stateManager.setFileState(path, this.itemToFileState(remote));
+				}
+			}
+
+			for (const [path, remote] of remoteFiles) {
+				if (localByPath.has(path)) continue;
+				toDelete.push(path);
+				// An UPLOAD with remote state but no local state is a remote delete
+				operations.push({
+					path,
+					direction: SyncDirection.UPLOAD,
+					localState: undefined,
+					remoteState: this.itemToFileState(remote),
+				});
+			}
+
+			logger.info(
+				`Reconcile-to-cloud plan: uploads=${toUpload.length} deletes=${toDelete.length} reuploads=${toRefresh.length}`
+			);
+
+			const threshold = this.getLargeDeleteThreshold();
+			if (threshold > 0 && toDelete.length >= threshold && this.largeDeleteWarningHandler) {
+				const decision = await this.largeDeleteWarningHandler({
+					localDeleteCount: 0,
+					remoteDeleteCount: toDelete.length,
+					threshold,
+					sampleLocalDeletes: [],
+					sampleRemoteDeletes: toDelete.slice(0, 10),
+				});
+				if (decision !== 'proceed') {
+					logger.info('Reconcile-to-cloud cancelled by user');
+					new Notice(t('notices.reconcile.cancelled'));
+					return;
+				}
+			}
+
+			if (operations.length === 0) {
+				new Notice(t('notices.reconcile.alreadyInSync'));
+				this.stateManager.setLastSyncTime(Date.now());
+				return;
+			}
+
+			let completed = 0;
+			progress(t('progress.files', { completed: 0, total: operations.length }));
+			const progressNotice = new ProgressNotice(t('progress.reconciling'), operations.length);
+			await this.executeOperations(operations, () => {
+				completed++;
+				progress(t('progress.files', { completed, total: operations.length }));
+				progressNotice.update(completed, t('progress.reconciling'));
+			});
+			progressNotice.hide();
+			progress(undefined);
+
+			this.eventManager.clearDirtyFiles();
+			this.stateManager.setLastSyncTime(Date.now());
+
+			new Notice(
+				t('notices.reconcile.toCloudComplete', {
+					uploaded: toUpload.length,
+					deleted: toDelete.length,
+					refreshed: toRefresh.length,
+				})
+			);
+		} catch (error) {
+			logger.error('Reconcile to cloud failed:', error);
 			new Notice(t('notices.reconcile.failed', { message: String(error) }));
 			throw error;
 		}

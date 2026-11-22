@@ -12,6 +12,10 @@ export const KOOFR_CONTENT_API_V2 = `${KOOFR_API_BASE}/content/api/v2`;
 export const SYNC_CONFIG = {
 	// Throttle delay for vault events (milliseconds)
 	EVENT_THROTTLE_MS: 3000,
+	// Files larger than this are downloaded in ranged chunks of this size.
+	// Obsidian mobile base64-bridges each response, so one huge request can
+	// need ~2.3x the file size in memory and crash Android with an OOM.
+	DOWNLOAD_CHUNK_BYTES: 8 * 1024 * 1024,
 };
 
 // Plugin metadata

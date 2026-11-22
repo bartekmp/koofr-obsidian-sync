@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { KoofrClient } from '../../../src/api/koofrClient';
 import { KoofrAuthProvider } from '../../../src/auth/koofrAuthProvider';
+import { SYNC_CONFIG } from '../../../src/constants';
 import { mockRequestUrl } from '../../setup';
 
 vi.mock('../../../src/utils/logger', () => ({
@@ -44,6 +45,51 @@ describe('KoofrClient', () => {
 		authProvider = makeAuthProvider();
 		client = new KoofrClient(authProvider, 'mount-1');
 		mockRequestUrl.mockReset();
+	});
+
+	describe('downloadFile', () => {
+		function bytes(values: number[]): ArrayBuffer {
+			return new Uint8Array(values).buffer;
+		}
+
+		function binaryResponse(status: number, values: number[]) {
+			return { status, text: '', json: null, arrayBuffer: bytes(values) };
+		}
+
+		beforeEach(() => {
+			SYNC_CONFIG.DOWNLOAD_CHUNK_BYTES = 4;
+		});
+
+		it('uses a single request for files at or below the chunk size', async () => {
+			mockRequestUrl.mockResolvedValue(binaryResponse(200, [1, 2, 3, 4]));
+
+			const result = await client.downloadFile('/a.bin', 4);
+
+			expect(mockRequestUrl).toHaveBeenCalledTimes(1);
+			expect(Array.from(new Uint8Array(result))).toEqual([1, 2, 3, 4]);
+		});
+
+		it('downloads larger files in ranged chunks and reassembles them', async () => {
+			mockRequestUrl
+				.mockResolvedValueOnce(binaryResponse(206, [1, 2, 3, 4]))
+				.mockResolvedValueOnce(binaryResponse(206, [5, 6, 7, 8]))
+				.mockResolvedValueOnce(binaryResponse(206, [9, 10]));
+
+			const result = await client.downloadFile('/a.bin', 10);
+
+			const ranges = mockRequestUrl.mock.calls.map((c) => c[0].headers.Range);
+			expect(ranges).toEqual(['bytes=0-3', 'bytes=4-7', 'bytes=8-9']);
+			expect(Array.from(new Uint8Array(result))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+		});
+
+		it('returns the full body when the server ignores the Range header', async () => {
+			mockRequestUrl.mockResolvedValueOnce(binaryResponse(200, [1, 2, 3, 4, 5, 6]));
+
+			const result = await client.downloadFile('/a.bin', 6);
+
+			expect(mockRequestUrl).toHaveBeenCalledTimes(1);
+			expect(Array.from(new Uint8Array(result))).toEqual([1, 2, 3, 4, 5, 6]);
+		});
 	});
 
 	describe('listMounts', () => {

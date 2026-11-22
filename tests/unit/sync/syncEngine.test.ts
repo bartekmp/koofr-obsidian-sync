@@ -112,7 +112,7 @@ describe('SyncEngine', () => {
 			const engine = makeEngine();
 			await engine.performSync();
 
-			expect(fileOps.downloadFile).toHaveBeenCalledWith('/note.md');
+			expect(fileOps.downloadFile).toHaveBeenCalledWith('/note.md', 5);
 			expect(mockApp.vault.adapter.writeBinary).toHaveBeenCalledWith(
 				'note.md',
 				expect.any(ArrayBuffer)
@@ -141,6 +141,29 @@ describe('SyncEngine', () => {
 
 			expect(fileOps.uploadFile).not.toHaveBeenCalled();
 			expect(fileOps.downloadFile).not.toHaveBeenCalled();
+		});
+
+		it('uploads a tracked file edited outside Obsidian (no vault event)', async () => {
+			stateManager.setLastSyncTime(Date.now());
+			stateManager.setFileState('note.md', {
+				path: 'note.md',
+				localMtime: 1000,
+				remoteHash: 'h1',
+				size: 5,
+				remoteModifiedTime: 1000,
+			});
+			fileOps.listAllItems.mockResolvedValue([
+				{ name: 'note.md', type: 'file', modified: 1000, size: 5, hash: 'h1', path: '/note.md' },
+			]);
+			const edited = makeTFile('note.md', 12, 9000);
+			mockApp.vault.getFiles.mockReturnValue([edited]);
+			mockApp.vault.getAbstractFileByPath.mockReturnValue(edited);
+			mockApp.vault.readBinary.mockResolvedValue(new TextEncoder().encode('edited').buffer);
+			fileOps.uploadFile.mockResolvedValue({ hash: 'h2', modified: 9000 });
+
+			await makeEngine().performSync();
+
+			expect(fileOps.uploadFile).toHaveBeenCalledWith('/note.md', expect.any(ArrayBuffer), 9000);
 		});
 	});
 
@@ -260,6 +283,49 @@ describe('SyncEngine', () => {
 			);
 			// Not a plain upload/download — it went through conflict resolution
 			expect(fileOps.uploadFile).not.toHaveBeenCalled();
+		});
+
+		it('create-duplicate saves the remote version as a copy and uploads the local one', async () => {
+			conflictResolver.setStrategy(ConflictResolutionStrategy.CREATE_DUPLICATE);
+			stateManager.setLastSyncTime(Date.now());
+			stateManager.setFileState('note.md', {
+				path: 'note.md',
+				localMtime: 1000,
+				remoteHash: 'old-hash',
+				size: 5,
+				remoteModifiedTime: 1000,
+			});
+			eventManager.getDirtyFiles = vi
+				.fn()
+				.mockReturnValue([{ path: 'note.md', type: LocalChangeType.MODIFY }]);
+			fileOps.listAllItems.mockResolvedValue([
+				{
+					name: 'note.md',
+					type: 'file',
+					modified: 5000,
+					size: 20,
+					hash: 'new-hash',
+					path: '/note.md',
+				},
+			]);
+			mockApp.vault.getAbstractFileByPath.mockReturnValue(makeTFile('note.md', 12, 9000));
+			mockApp.vault.readBinary.mockResolvedValue(new TextEncoder().encode('local content').buffer);
+			fileOps.downloadFile.mockResolvedValue(new TextEncoder().encode('remote content').buffer);
+			fileOps.uploadFile.mockResolvedValue({ hash: 'uploaded-hash', modified: 9000 });
+
+			await makeEngine().performSync();
+
+			// Remote version is fetched from the ORIGINAL remote path...
+			expect(fileOps.downloadFile).toHaveBeenCalledWith('/note.md');
+			// ...and written to a dated copy, not over the base file
+			const writtenPaths = mockApp.vault.adapter.writeBinary.mock.calls.map((c) => c[0]);
+			expect(writtenPaths).toHaveLength(1);
+			expect(writtenPaths[0]).toMatch(/^note \(conflict .*\)\.md$/);
+			// Local version wins on the remote and base state is refreshed,
+			// so the conflict is not re-detected on the next sync
+			expect(fileOps.uploadFile).toHaveBeenCalledWith('/note.md', expect.any(ArrayBuffer), 9000);
+			expect(stateManager.getFileState('note.md')?.remoteHash).toBe('uploaded-hash');
+			expect(stateManager.getFileState(writtenPaths[0] as string)).toBeUndefined();
 		});
 
 		it('treats a hash-unchanged remote echo as a plain upload, not a conflict', async () => {
@@ -394,6 +460,90 @@ describe('SyncEngine', () => {
 
 			expect(fileOps.deleteFile).toHaveBeenCalledWith('/OldFolder');
 			expect(stateManager.hasFolderPath('OldFolder')).toBe(false);
+		});
+
+		it('re-queues a failed folder delete for the next sync', async () => {
+			stateManager.addFolderPath('OldFolder');
+			const dirty = [{ path: 'OldFolder', type: LocalChangeType.FOLDER_DELETE }];
+			eventManager.getDirtyFiles = vi.fn().mockReturnValue(dirty);
+			const addDirtyChange = vi.spyOn(eventManager, 'addDirtyChange');
+			fileOps.deleteFile.mockRejectedValue(new Error('boom'));
+
+			await makeEngine().performSync();
+
+			expect(addDirtyChange).toHaveBeenCalledWith(dirty[0]);
+		});
+
+		it('skips creating descendants of a folder whose create failed', async () => {
+			eventManager.getDirtyFiles = vi.fn().mockReturnValue([
+				{ path: 'A', type: LocalChangeType.FOLDER_CREATE },
+				{ path: 'A/B', type: LocalChangeType.FOLDER_CREATE },
+			]);
+			fileOps.createFolder.mockRejectedValue(new Error('boom'));
+
+			await makeEngine().performSync();
+
+			expect(fileOps.createFolder).toHaveBeenCalledTimes(1);
+			expect(fileOps.createFolder).toHaveBeenCalledWith('/A');
+		});
+	});
+
+	describe('reconcileToCloud', () => {
+		it('uploads local-only and mismatched files, deletes remote-only files', async () => {
+			mockApp.vault.getFiles.mockReturnValue([
+				makeTFile('local-only.md', 5, 1000),
+				makeTFile('changed.md', 7, 1000),
+				makeTFile('same.md', 4, 1000),
+			]);
+			mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) =>
+				path === 'local-only.md'
+					? makeTFile('local-only.md', 5, 1000)
+					: path === 'changed.md'
+						? makeTFile('changed.md', 7, 1000)
+						: null
+			);
+			mockApp.vault.readBinary.mockResolvedValue(new ArrayBuffer(3));
+			fileOps.uploadFile.mockResolvedValue({ hash: 'u', modified: 1000 });
+			fileOps.listAllItems.mockResolvedValue([
+				{
+					name: 'changed.md',
+					type: 'file',
+					modified: 1,
+					size: 99,
+					hash: 'h1',
+					path: '/changed.md',
+				},
+				{ name: 'same.md', type: 'file', modified: 1, size: 4, hash: 'h2', path: '/same.md' },
+				{
+					name: 'remote-only.md',
+					type: 'file',
+					modified: 1,
+					size: 3,
+					hash: 'h3',
+					path: '/remote-only.md',
+				},
+			]);
+
+			await makeEngine().reconcileToCloud();
+
+			const uploaded = fileOps.uploadFile.mock.calls.map((c) => c[0]).sort();
+			expect(uploaded).toEqual(['/changed.md', '/local-only.md']);
+			expect(fileOps.deleteFile).toHaveBeenCalledWith('/remote-only.md');
+			expect(fileOps.deleteFile).toHaveBeenCalledTimes(1);
+			expect(fileOps.downloadFile).not.toHaveBeenCalled();
+		});
+
+		it('applies nothing when the user declines the large-delete warning', async () => {
+			fileOps.listAllItems.mockResolvedValue([
+				{ name: 'a.md', type: 'file', modified: 1, size: 1, hash: 'h', path: '/a.md' },
+			]);
+
+			await makeEngine({
+				getLargeDeleteThreshold: () => 1,
+				largeDeleteWarningHandler: vi.fn().mockResolvedValue('cancel'),
+			}).reconcileToCloud();
+
+			expect(fileOps.deleteFile).not.toHaveBeenCalled();
 		});
 	});
 });

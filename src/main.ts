@@ -105,6 +105,7 @@ export default class KoofrSyncPlugin extends Plugin {
 	private currentSyncStatus: SyncStatus = SyncStatus.DISCONNECTED;
 	private currentProgressMessage?: string;
 	private mobileProgressNotice?: Notice;
+	private lastSavedSettings?: string;
 
 	async onload() {
 		logger.info('Loading Koofr Sync plugin');
@@ -170,6 +171,14 @@ export default class KoofrSyncPlugin extends Plugin {
 			name: t('commands.reconcileFromCloud'),
 			callback: async () => {
 				await this.reconcileFromCloud();
+			},
+		});
+
+		this.addCommand({
+			id: 'reconcile-to-cloud',
+			name: t('commands.reconcileToCloud'),
+			callback: async () => {
+				await this.reconcileToCloud();
 			},
 		});
 
@@ -275,6 +284,8 @@ export default class KoofrSyncPlugin extends Plugin {
 					)
 			);
 			this.eventManager.setPullOnlyModeCheck(() => this.getExperimentalSetting('pullOnlyMode'));
+			this.eventManager.setSyncOnFileChange(this.settings.syncOnFileChange ?? true);
+			this.eventManager.setChangeSyncDelay(this.settings.syncOnChangeDelay);
 
 			this.conflictQueue = new ConflictQueue(
 				this.app,
@@ -835,6 +846,18 @@ export default class KoofrSyncPlugin extends Plugin {
 	 * downloaded. Destructive deletes are confirmed via the large-delete modal.
 	 */
 	async reconcileFromCloud(): Promise<void> {
+		await this.runRecovery((engine) => engine.reconcileFromCloud());
+	}
+
+	/**
+	 * Inverse recovery: treat the local vault as authoritative. Local-only
+	 * files are uploaded, files only on Koofr are deleted.
+	 */
+	async reconcileToCloud(): Promise<void> {
+		await this.runRecovery((engine) => engine.reconcileToCloud());
+	}
+
+	private async runRecovery(operation: (engine: SyncEngine) => Promise<void>): Promise<void> {
 		if (!this.credentialStorage.hasCredentials()) {
 			new Notice(t('notices.reconcile.notConnected'));
 			return;
@@ -854,7 +877,7 @@ export default class KoofrSyncPlugin extends Plugin {
 		this.isSyncing = true;
 		try {
 			this.setSyncStatus(SyncStatus.SYNCING);
-			await this.syncEngine.reconcileFromCloud();
+			await operation(this.syncEngine);
 			await this.saveSettings();
 			this.setSyncStatus(SyncStatus.IDLE);
 		} catch (error) {
@@ -883,12 +906,18 @@ export default class KoofrSyncPlugin extends Plugin {
 
 		if (this.eventManager) {
 			this.eventManager.setSyncOnFileChange(this.settings.syncOnFileChange ?? true);
+			this.eventManager.setChangeSyncDelay(this.settings.syncOnChangeDelay);
 		}
 
 		this.applyLogLevel();
 		this.applyVaultLogHook();
 
+		// Skip the disk write when nothing changed — rewriting data.json bumps its
+		// mtime and can retrigger sync-on-change.
+		const serialized = JSON.stringify(this.settings);
+		if (serialized === this.lastSavedSettings) return;
 		await this.saveData(this.settings);
+		this.lastSavedSettings = serialized;
 	}
 
 	private static readonly LOG_LEVEL_MAP: Record<string, LogLevel> = {
