@@ -160,11 +160,7 @@ export class RootFolderWarningModal extends Modal {
 			.addButton((b) =>
 				b
 					.setButtonText(t('rootFolderWarning.confirm'))
-					// setWarning is deprecated in favor of setDestructive, but
-					// setDestructive requires Obsidian 1.13.0 while this plugin's
-					// minAppVersion is 1.12.0 — so setWarning is the correct API
-					// for the supported version range.
-					.setWarning()
+					.setDestructive()
 					.onClick(() => {
 						this.confirmed = true;
 						this.close();
