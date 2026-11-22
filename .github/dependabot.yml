@@ -9,6 +9,13 @@ updates:
         update-types:
           - "minor"
           - "patch"
+      # vitest packages pin each other as exact peers — they must bump together
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+        update-types:
+          - "major"
     ignore:
       # typescript-eslint (our lint toolchain) only supports TypeScript
       # <6.1.0. TypeScript 6.0/7.0 (the native compiler port) can't be
