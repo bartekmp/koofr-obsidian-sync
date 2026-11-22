@@ -4,6 +4,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # "fix" makes release.yml cut a patch release when a deps PR is merged
+    # (chore: commits never trigger one). Yields "fix(deps): ..." / "fix(deps-dev): ...".
+    commit-message:
+      prefix: "fix"
+      prefix-development: "fix"
+      include: "scope"
     groups:
       # vitest packages pin each other as exact peers — they must bump together
       # in every update type. Listed first so it claims them before the generic group.
