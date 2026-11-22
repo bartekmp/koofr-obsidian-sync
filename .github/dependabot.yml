@@ -5,17 +5,16 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      npm-minor-patch:
-        update-types:
-          - "minor"
-          - "patch"
       # vitest packages pin each other as exact peers — they must bump together
+      # in every update type. Listed first so it claims them before the generic group.
       vitest:
         patterns:
           - "vitest"
           - "@vitest/*"
+      npm-minor-patch:
         update-types:
-          - "major"
+          - "minor"
+          - "patch"
     ignore:
       # typescript-eslint (our lint toolchain) only supports TypeScript
       # <6.1.0. TypeScript 6.0/7.0 (the native compiler port) can't be
