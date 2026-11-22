@@ -2,7 +2,15 @@
  * Settings tab for the Koofr Sync plugin
  */
 
-import { App, PluginSettingTab, Setting, Notice, type PluginManifest } from 'obsidian';
+import {
+	App,
+	PluginSettingTab,
+	Notice,
+	type PluginManifest,
+	type ButtonComponent,
+	type SettingDefinition,
+	type SettingDefinitionItem,
+} from 'obsidian';
 import {
 	PluginSettings,
 	ConflictResolutionStrategy,
@@ -43,7 +51,38 @@ interface KoofrPlugin {
 }
 
 /**
- * Settings tab UI
+ * Keys passed to getControlValue/setControlValue by declarative controls.
+ * They are virtual: some map onto differently-shaped settings (e.g. the
+ * sync interval is stored in minutes but picked by index).
+ */
+type ControlKey =
+	| 'syncInterval'
+	| 'syncOnFileChange'
+	| 'syncOnChangeDelay'
+	| 'startupSyncDelay'
+	| 'conflictResolution'
+	| 'syncAppSettings'
+	| 'syncPluginManifests'
+	| 'syncCssSnippets'
+	| 'logLevel'
+	| 'largeDeleteThreshold'
+	| 'maxConcurrentOperations'
+	| 'pullOnlyMode';
+
+const CHANGE_DELAY_SECONDS = [3, 5, 10, 30, 60];
+
+/** Description made of several lines (plain strings don't render line breaks). */
+function descLines(...lines: string[]): DocumentFragment {
+	return createFragment((frag) => {
+		lines.forEach((line, i) => {
+			if (i > 0) frag.createEl('br');
+			frag.appendText(line);
+		});
+	});
+}
+
+/**
+ * Settings tab UI (declarative — requires Obsidian 1.13.0+)
  */
 export class KoofrSettingTab extends PluginSettingTab {
 	plugin: KoofrPlugin;
@@ -55,360 +94,319 @@ export class KoofrSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-
-		this.displayAuthSection(containerEl);
-		this.displaySyncFolderSection(containerEl);
-		this.displaySyncSection(containerEl);
-		this.displayAdvancedSection(containerEl);
-		this.displayExperimentalSection(containerEl);
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [
+			this.authGroup(),
+			this.syncFolderGroup(),
+			this.syncGroup(),
+			this.advancedGroup(),
+			this.experimentalPage(),
+		];
 	}
 
-	/**
-	 * Display authentication section
-	 */
-	private displayAuthSection(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName(t('settings.auth.heading')).setHeading();
+	// ------------------------------------------------------------------
+	// Control value storage
+	// ------------------------------------------------------------------
 
-		const isConnected = !!this.plugin.settings.connectedEmail;
-
-		const statusSetting = new Setting(containerEl).setName(
-			t('settings.auth.connectionStatus.name')
-		);
-
-		if (isConnected) {
-			statusSetting.setDesc(
-				t('settings.auth.connectionStatus.connectedAs', {
-					email: this.plugin.settings.connectedEmail || '',
-				})
-			);
-			statusSetting.addButton((button) =>
-				button.setButtonText(t('settings.auth.connectionStatus.test')).onClick(async () => {
-					const original = button.buttonEl.textContent;
-					button.setDisabled(true);
-					button.setButtonText(t('settings.auth.connectionStatus.testing'));
-					try {
-						await this.plugin.testConnection();
-						new Notice(t('settings.auth.connectionStatus.testSuccess'));
-					} catch (error) {
-						new Notice(
-							t('settings.auth.connectionStatus.testFailed', {
-								message:
-									error instanceof Error
-										? error.message
-										: t('settings.auth.connectionStatus.unknownError'),
-							})
-						);
-					} finally {
-						button.setDisabled(false);
-						button.setButtonText(original ?? t('settings.auth.connectionStatus.test'));
-					}
-				})
-			);
-			statusSetting.addButton((button) =>
-				button.setButtonText(t('settings.auth.connectionStatus.disconnect')).onClick(async () => {
-					this.plugin.disconnect();
-					this.display();
-				})
-			);
-			return;
+	getControlValue(key: string): unknown {
+		const settings = this.plugin.settings;
+		switch (key as ControlKey) {
+			case 'syncInterval':
+				return String(this.closestIntervalIndex(settings.syncInterval));
+			case 'syncOnFileChange':
+				return settings.syncOnFileChange ?? true;
+			case 'syncOnChangeDelay':
+				return String(settings.syncOnChangeDelay);
+			case 'startupSyncDelay':
+				return String(settings.startupSyncDelay);
+			case 'conflictResolution':
+				return settings.conflictResolution;
+			case 'syncAppSettings':
+				return settings.syncAppSettings;
+			case 'syncPluginManifests':
+				return settings.syncPluginManifests;
+			case 'syncCssSnippets':
+				return settings.syncCssSnippets;
+			case 'logLevel':
+				return settings.logLevel;
+			case 'largeDeleteThreshold':
+				return settings.largeDeleteThreshold ?? 25;
+			case 'maxConcurrentOperations':
+				return this.plugin.getExperimentalSetting('maxConcurrentOperations');
+			case 'pullOnlyMode':
+				return this.plugin.getExperimentalSetting('pullOnlyMode');
+			default:
+				return undefined;
 		}
-
-		statusSetting.setDesc(t('settings.auth.connectionStatus.notConnected'));
-
-		const helpDiv = containerEl.createDiv({
-			cls: 'setting-item-description koofr-sync-settings-help',
-		});
-		helpDiv.appendText(t('settings.auth.appPasswordHelpPrefix'));
-		helpDiv.createEl('a', {
-			text: t('settings.auth.appPasswordHelpLink'),
-			href: KOOFR_APP_PASSWORD_URL,
-			attr: { target: '_blank' },
-		});
-		helpDiv.appendText(t('settings.auth.appPasswordHelpSuffix'));
-
-		new Setting(containerEl).setName(t('settings.auth.email.name')).addText((text) =>
-			text
-				.setPlaceholder(t('settings.auth.email.placeholder'))
-				.setValue(this.pendingEmail)
-				.onChange((value) => {
-					this.pendingEmail = value.trim();
-				})
-		);
-
-		new Setting(containerEl).setName(t('settings.auth.appPassword.name')).addText((text) => {
-			text.inputEl.type = 'password';
-			text
-				.setPlaceholder(t('settings.auth.appPassword.placeholder'))
-				.setValue(this.pendingAppPassword)
-				.onChange((value) => {
-					this.pendingAppPassword = value;
-				});
-		});
-
-		new Setting(containerEl).addButton((button) =>
-			button
-				.setButtonText(t('settings.auth.connectionStatus.connect'))
-				.setCta()
-				.onClick(async () => {
-					if (!this.pendingEmail || !this.pendingAppPassword) {
-						new Notice(t('settings.auth.connectionStatus.missingFields'));
-						return;
-					}
-					try {
-						await this.plugin.authenticate(this.pendingEmail, this.pendingAppPassword);
-						this.pendingAppPassword = '';
-						this.display();
-					} catch (error) {
-						new Notice(
-							t('settings.auth.connectionStatus.connectFailed', {
-								message:
-									error instanceof Error
-										? error.message
-										: t('settings.auth.connectionStatus.unknownError'),
-							})
-						);
-					}
-				})
-		);
 	}
 
-	/**
-	 * Display sync folder (mount + path) section
-	 */
-	private displaySyncFolderSection(containerEl: HTMLElement): void {
-		const isConnected = !!this.plugin.settings.connectedEmail;
+	async setControlValue(key: string, value: unknown): Promise<void> {
+		const settings = this.plugin.settings;
+		switch (key as ControlKey) {
+			case 'syncInterval':
+				settings.syncInterval = SYNC_INTERVAL_OPTIONS[Number(value)].minutes;
+				break;
+			case 'syncOnFileChange':
+				settings.syncOnFileChange = value as boolean;
+				break;
+			case 'syncOnChangeDelay':
+				settings.syncOnChangeDelay = parseInt(value as string, 10);
+				break;
+			case 'startupSyncDelay':
+				settings.startupSyncDelay = parseInt(value as string, 10);
+				break;
+			case 'conflictResolution':
+				settings.conflictResolution = value as ConflictResolutionStrategy;
+				break;
+			case 'syncAppSettings':
+				// These three have side effects (file tracking), so the plugin saves
+				await this.plugin.onAppSettingsSyncChanged(value as boolean);
+				return;
+			case 'syncPluginManifests':
+				await this.plugin.onPluginManifestSyncChanged(value as boolean);
+				return;
+			case 'syncCssSnippets':
+				await this.plugin.onCssSnippetSyncChanged(value as boolean);
+				return;
+			case 'logLevel':
+				settings.logLevel = value as PluginSettings['logLevel'];
+				break;
+			case 'largeDeleteThreshold':
+				settings.largeDeleteThreshold = value as number;
+				break;
+			case 'maxConcurrentOperations':
+				settings.experimental = {
+					...DEFAULT_EXPERIMENTAL_SETTINGS,
+					...settings.experimental,
+					maxConcurrentOperations: value as number,
+				};
+				break;
+			case 'pullOnlyMode':
+				settings.experimental = {
+					...DEFAULT_EXPERIMENTAL_SETTINGS,
+					...settings.experimental,
+					pullOnlyMode: value as boolean,
+				};
+				break;
+			default:
+				return;
+		}
+		await this.plugin.saveSettings();
+	}
 
-		new Setting(containerEl).setName(t('settings.syncFolder.heading')).setHeading();
-		containerEl.createEl('p', {
-			text: t('settings.syncFolder.explainer'),
-			cls: 'setting-item-description koofr-sync-settings-help',
-		});
+	// ------------------------------------------------------------------
+	// Authentication
+	// ------------------------------------------------------------------
 
-		if (isConnected) {
-			const mountName = this.plugin.settings.mountName || t('settings.syncFolder.notSelected');
-			const path = this.plugin.settings.remotePath || '/';
-			const desc = this.plugin.settings.mountId
-				? t('settings.syncFolder.currentSelection', { mount: mountName, path })
-				: t('settings.syncFolder.notSelected');
+	private authGroup(): SettingDefinitionItem {
+		const connectedEmail = this.plugin.settings.connectedEmail;
+		const heading = t('settings.auth.heading');
 
-			new Setting(containerEl)
-				.setName(t('settings.syncFolder.remoteFolder'))
-				.setDesc(desc)
-				.addButton((btn) =>
-					btn.setButtonText(t('settings.syncFolder.browse')).onClick(async () => {
-						const mounts = await this.plugin.listMounts().catch((error) => {
-							new Notice(
-								t('settings.syncFolder.listMountsFailed', {
-									message: error instanceof Error ? error.message : String(error),
+		if (connectedEmail) {
+			return {
+				type: 'group',
+				heading,
+				items: [
+					{
+						name: t('settings.auth.connectionStatus.name'),
+						desc: t('settings.auth.connectionStatus.connectedAs', { email: connectedEmail }),
+						render: (setting) => {
+							setting.addButton((button) =>
+								button.setButtonText(t('settings.auth.connectionStatus.test')).onClick(() => {
+									void this.runConnectionTest(button);
 								})
 							);
-							return [] as KoofrMount[];
-						});
-						const modal = new FolderBrowserModal(
-							this.app,
-							mounts,
-							(mountId, path) => this.plugin.listFoldersForPicker(mountId, path),
-							(mountId, parentPath, name) =>
-								this.plugin.createFolderForPicker(mountId, parentPath, name),
-							(selection: FolderSelection) => {
-								void this.plugin.onRemoteFolderChanged(selection).then(() => {
-									this.display();
-								});
-							},
-							this.plugin.settings.mountId,
-							this.plugin.settings.remotePath,
-							{ warnOnRootSelect: true }
-						);
-						modal.open();
-					})
-				);
+							setting.addButton((button) =>
+								button.setButtonText(t('settings.auth.connectionStatus.disconnect')).onClick(() => {
+									this.plugin.disconnect();
+									this.update();
+								})
+							);
+						},
+					},
+				],
+			};
+		}
 
-			this.displaySyncStatus(containerEl);
-		} else {
-			new Setting(containerEl)
-				.setName(t('settings.syncFolder.remoteFolder'))
-				.setDesc(t('settings.syncFolder.connectFirst'));
+		return {
+			type: 'group',
+			heading,
+			items: [
+				{
+					name: t('settings.auth.connectionStatus.name'),
+					desc: createFragment((frag) => {
+						frag.appendText(t('settings.auth.connectionStatus.notConnected'));
+						frag.createEl('br');
+						frag.appendText(t('settings.auth.appPasswordHelpPrefix'));
+						frag.createEl('a', {
+							text: t('settings.auth.appPasswordHelpLink'),
+							href: KOOFR_APP_PASSWORD_URL,
+							attr: { target: '_blank' },
+						});
+						frag.appendText(t('settings.auth.appPasswordHelpSuffix'));
+					}),
+					render: () => {},
+				},
+				{
+					name: t('settings.auth.email.name'),
+					render: (setting) => {
+						setting.addText((text) =>
+							text
+								.setPlaceholder(t('settings.auth.email.placeholder'))
+								.setValue(this.pendingEmail)
+								.onChange((value) => {
+									this.pendingEmail = value.trim();
+								})
+						);
+					},
+				},
+				{
+					name: t('settings.auth.appPassword.name'),
+					render: (setting) => {
+						setting.addText((text) => {
+							text.inputEl.type = 'password';
+							text
+								.setPlaceholder(t('settings.auth.appPassword.placeholder'))
+								.setValue(this.pendingAppPassword)
+								.onChange((value) => {
+									this.pendingAppPassword = value;
+								});
+						});
+					},
+				},
+				{
+					name: t('settings.auth.connectionStatus.connect'),
+					render: (setting) => {
+						setting.addButton((button) =>
+							button
+								.setButtonText(t('settings.auth.connectionStatus.connect'))
+								.setCta()
+								.onClick(() => {
+									void this.connect();
+								})
+						);
+					},
+				},
+			],
+		};
+	}
+
+	private async runConnectionTest(button: ButtonComponent): Promise<void> {
+		const original = button.buttonEl.textContent;
+		button.setDisabled(true);
+		button.setButtonText(t('settings.auth.connectionStatus.testing'));
+		try {
+			await this.plugin.testConnection();
+			new Notice(t('settings.auth.connectionStatus.testSuccess'));
+		} catch (error) {
+			new Notice(
+				t('settings.auth.connectionStatus.testFailed', {
+					message: this.errorMessage(error),
+				})
+			);
+		} finally {
+			button.setDisabled(false);
+			button.setButtonText(original ?? t('settings.auth.connectionStatus.test'));
 		}
 	}
 
-	/**
-	 * Display sync configuration section
-	 */
-	private displaySyncSection(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName(t('settings.sync.heading')).setHeading();
-
-		const { configDir } = this.app.vault;
-
-		const closestIntervalIndex = (minutes: number): number => {
-			let bestIndex = 0;
-			let bestDiff = Infinity;
-			SYNC_INTERVAL_OPTIONS.forEach((opt, i) => {
-				const diff = Math.abs(opt.minutes - minutes);
-				if (diff < bestDiff) {
-					bestDiff = diff;
-					bestIndex = i;
-				}
-			});
-			return bestIndex;
-		};
-
-		new Setting(containerEl)
-			.setName(t('settings.sync.automaticInterval.name'))
-			.setDesc(t('settings.sync.automaticInterval.desc'))
-			.addDropdown((dropdown) => {
-				SYNC_INTERVAL_OPTIONS.forEach((opt, i) => {
-					dropdown.addOption(String(i), opt.label);
-				});
-				dropdown
-					.setValue(String(closestIntervalIndex(this.plugin.settings.syncInterval)))
-					.onChange(async (value) => {
-						this.plugin.settings.syncInterval = SYNC_INTERVAL_OPTIONS[Number(value)].minutes;
-						await this.plugin.saveSettings();
-					});
-			});
-
-		// Sync on file change toggle
-		new Setting(containerEl)
-			.setName(t('settings.sync.onFileChange.name'))
-			.setDesc(t('settings.sync.onFileChange.desc'))
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.syncOnFileChange ?? true).onChange(async (value) => {
-					this.plugin.settings.syncOnFileChange = value;
-					await this.plugin.saveSettings();
-				})
+	private async connect(): Promise<void> {
+		if (!this.pendingEmail || !this.pendingAppPassword) {
+			new Notice(t('settings.auth.connectionStatus.missingFields'));
+			return;
+		}
+		try {
+			await this.plugin.authenticate(this.pendingEmail, this.pendingAppPassword);
+			this.pendingAppPassword = '';
+			this.update();
+		} catch (error) {
+			new Notice(
+				t('settings.auth.connectionStatus.connectFailed', { message: this.errorMessage(error) })
 			);
-
-		// Delay before syncing file changes
-		new Setting(containerEl)
-			.setName(t('settings.sync.changeDelay.name'))
-			.setDesc(t('settings.sync.changeDelay.desc'))
-			.addDropdown((dropdown) => {
-				for (const seconds of [3, 5, 10, 30, 60]) {
-					dropdown.addOption(String(seconds), t('settings.sync.changeDelay.seconds', { seconds }));
-				}
-				dropdown
-					.setValue(String(this.plugin.settings.syncOnChangeDelay))
-					.onChange(async (value) => {
-						this.plugin.settings.syncOnChangeDelay = parseInt(value);
-						await this.plugin.saveSettings();
-					});
-			});
-
-		// Startup sync delay
-		new Setting(containerEl)
-			.setName(t('settings.sync.startupDelay.name'))
-			.setDesc(t('settings.sync.startupDelay.desc'))
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption('0', t('settings.sync.startupDelay.disabled'))
-					.addOption('1', t('settings.sync.startupDelay.oneSecond'))
-					.addOption('10', t('settings.sync.startupDelay.tenSeconds'))
-					.addOption('30', t('settings.sync.startupDelay.thirtySeconds'))
-					.setValue(String(this.plugin.settings.startupSyncDelay))
-					.onChange(async (value) => {
-						this.plugin.settings.startupSyncDelay = parseInt(value);
-						await this.plugin.saveSettings();
-					})
-			);
-
-		// Conflict resolution strategy
-		new Setting(containerEl)
-			.setName(t('settings.sync.conflictResolution.name'))
-			.setDesc(t('settings.sync.conflictResolution.desc'))
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption(
-						ConflictResolutionStrategy.LAST_WRITE_WINS,
-						t('settings.sync.conflictResolution.lastWriteWins')
-					)
-					.addOption(
-						ConflictResolutionStrategy.CREATE_DUPLICATE,
-						t('settings.sync.conflictResolution.createDuplicate')
-					)
-					.addOption(
-						ConflictResolutionStrategy.MANUAL,
-						t('settings.sync.conflictResolution.manual')
-					)
-					.setValue(this.plugin.settings.conflictResolution)
-					.onChange(async (value) => {
-						this.plugin.settings.conflictResolution = value as ConflictResolutionStrategy;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t('settings.sync.appSettings.name'))
-			.setDesc(t('settings.sync.appSettings.desc', { configDir }))
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.syncAppSettings).onChange(async (value) => {
-					await this.plugin.onAppSettingsSyncChanged(value);
-				})
-			);
-
-		new Setting(containerEl)
-			.setName(t('settings.sync.plugins.name'))
-			.setDesc(t('settings.sync.plugins.desc', { configDir }))
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.syncPluginManifests).onChange(async (value) => {
-					await this.plugin.onPluginManifestSyncChanged(value);
-				})
-			);
-
-		new Setting(containerEl)
-			.setName(t('settings.sync.cssSnippets.name'))
-			.setDesc(t('settings.sync.cssSnippets.desc', { configDir }))
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.syncCssSnippets).onChange(async (value) => {
-					await this.plugin.onCssSnippetSyncChanged(value);
-				})
-			);
-
-		// Excluded patterns — a plain editor over the vault-root .syncIgnore
-		// file. The sync engine re-reads that file on every run, so writing it
-		// here is all that's needed; no engine coordination required. Saved on
-		// blur to avoid rewriting the file on every keystroke.
-		new Setting(containerEl)
-			.setName(t('settings.sync.excludePatterns.name'))
-			.setDesc(t('settings.sync.excludePatterns.desc'))
-			.addTextArea((textArea) => {
-				textArea.setPlaceholder(t('settings.sync.excludePatterns.placeholder'));
-				textArea.inputEl.rows = 5;
-				textArea.inputEl.addClass('koofr-sync-exclude-patterns');
-
-				let loaded = '';
-				void this.plugin.readSyncIgnore().then((content) => {
-					loaded = content;
-					textArea.setValue(content);
-				});
-
-				textArea.inputEl.addEventListener('blur', async () => {
-					const value = textArea.getValue();
-					if (value === loaded) return;
-					try {
-						await this.plugin.writeSyncIgnore(value);
-						loaded = value;
-						new Notice(t('settings.sync.excludePatterns.saved'));
-					} catch (error) {
-						new Notice(
-							t('settings.sync.excludePatterns.saveFailed', {
-								message: error instanceof Error ? error.message : String(error),
-							})
-						);
-					}
-				});
-			});
-
-		containerEl.createEl('p', {
-			text: t('settings.sync.excludePatterns.fileHint', { file: SYNC_IGNORE_FILE }),
-			cls: 'setting-item-description koofr-sync-settings-help',
-		});
+		}
 	}
 
-	private displaySyncStatus(containerEl: HTMLElement): void {
+	private errorMessage(error: unknown): string {
+		return error instanceof Error
+			? error.message
+			: t('settings.auth.connectionStatus.unknownError');
+	}
+
+	// ------------------------------------------------------------------
+	// Sync folder
+	// ------------------------------------------------------------------
+
+	private syncFolderGroup(): SettingDefinitionItem {
+		const explainer = t('settings.syncFolder.explainer');
 		const isConnected = !!this.plugin.settings.connectedEmail;
+
+		if (!isConnected) {
+			return {
+				type: 'group',
+				heading: t('settings.syncFolder.heading'),
+				items: [
+					{
+						name: t('settings.syncFolder.remoteFolder'),
+						desc: descLines(explainer, t('settings.syncFolder.connectFirst')),
+						render: () => {},
+					},
+				],
+			};
+		}
+
+		const mountName = this.plugin.settings.mountName || t('settings.syncFolder.notSelected');
+		const path = this.plugin.settings.remotePath || '/';
+		const selection = this.plugin.settings.mountId
+			? t('settings.syncFolder.currentSelection', { mount: mountName, path })
+			: t('settings.syncFolder.notSelected');
+
+		return {
+			type: 'group',
+			heading: t('settings.syncFolder.heading'),
+			items: [
+				{
+					name: t('settings.syncFolder.remoteFolder'),
+					desc: descLines(explainer, selection),
+					render: (setting) => {
+						setting.addButton((btn) =>
+							btn.setButtonText(t('settings.syncFolder.browse')).onClick(() => {
+								void this.browseRemoteFolder();
+							})
+						);
+					},
+				},
+				this.syncStatusItem(),
+			],
+		};
+	}
+
+	private async browseRemoteFolder(): Promise<void> {
+		const mounts = await this.plugin.listMounts().catch((error) => {
+			new Notice(
+				t('settings.syncFolder.listMountsFailed', {
+					message: error instanceof Error ? error.message : String(error),
+				})
+			);
+			return [] as KoofrMount[];
+		});
+		const modal = new FolderBrowserModal(
+			this.app,
+			mounts,
+			(mountId, path) => this.plugin.listFoldersForPicker(mountId, path),
+			(mountId, parentPath, name) => this.plugin.createFolderForPicker(mountId, parentPath, name),
+			(selection: FolderSelection) => {
+				void this.plugin.onRemoteFolderChanged(selection).then(() => {
+					this.update();
+				});
+			},
+			this.plugin.settings.mountId,
+			this.plugin.settings.remotePath,
+			{ warnOnRootSelect: true }
+		);
+		modal.open();
+	}
+
+	private syncStatusItem(): SettingDefinition {
 		const syncStatus = this.plugin.getSyncStatusInfo();
 		const statusText = this.getSyncStatusText(syncStatus.status);
 		const lastSyncText = syncStatus.lastSyncTime
@@ -422,104 +420,31 @@ export class KoofrSettingTab extends PluginSettingTab {
 			syncStatus.conflictCount > 0
 				? t('settings.sync.status.conflictsPending', { count: syncStatus.conflictCount })
 				: t('settings.sync.status.noConflicts');
+		const hasFolder = !!this.plugin.settings.mountId;
 
-		new Setting(containerEl)
-			.setName(t('settings.sync.status.name'))
-			.setDesc(
-				t('settings.sync.status.desc', {
-					status: statusText,
-					lastSync: lastSyncText,
-					progress: progressText,
-					conflicts: conflictText,
-				})
-			)
-			.addButton((btn) => {
-				btn
-					.setButtonText(t('settings.sync.status.syncNow'))
-					.setCta()
-					.onClick(() => {
-						void this.plugin.triggerManualSync();
-					});
-				if (!isConnected || !this.plugin.settings.mountId) {
-					btn.setDisabled(true);
-					btn.setTooltip(
-						!isConnected
-							? t('settings.sync.status.connectTooltip')
-							: t('settings.sync.status.selectFolderTooltip')
-					);
-				}
-			});
-	}
-
-	/**
-	 * Display advanced section
-	 */
-	private displayAdvancedSection(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName(t('settings.advanced.heading')).setHeading();
-
-		// Log level
-		new Setting(containerEl)
-			.setName(t('settings.advanced.logLevel.name'))
-			.setDesc(t('settings.advanced.logLevel.desc'))
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption('off', t('settings.advanced.logLevel.off'))
-					.addOption('error', t('settings.advanced.logLevel.error'))
-					.addOption('warn', t('settings.advanced.logLevel.warn'))
-					.addOption('info', t('settings.advanced.logLevel.info'))
-					.addOption('debug', t('settings.advanced.logLevel.debug'))
-					.setValue(this.plugin.settings.logLevel)
-					.onChange(async (value) => {
-						this.plugin.settings.logLevel = value as PluginSettings['logLevel'];
-						await this.plugin.saveSettings();
-					})
-			);
-
-		// Large-delete safety threshold
-		new Setting(containerEl)
-			.setName(t('settings.advanced.largeDeleteThreshold.name'))
-			.setDesc(t('settings.advanced.largeDeleteThreshold.desc'))
-			.addText((text) =>
-				text
-					.setPlaceholder(t('settings.advanced.largeDeleteThreshold.placeholder'))
-					.setValue(String(this.plugin.settings.largeDeleteThreshold ?? 25))
-					.onChange(async (value) => {
-						const parsed = parseInt(value, 10);
-						if (Number.isNaN(parsed) || parsed < 0) return;
-						this.plugin.settings.largeDeleteThreshold = parsed;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		// Reset sync token (clears tracked state; no delta cursor to reset with Koofr)
-		new Setting(containerEl)
-			.setName(t('settings.advanced.resetSyncToken.name'))
-			.setDesc(t('settings.advanced.resetSyncToken.desc'))
-			.addButton((button) =>
-				button.setButtonText(t('settings.advanced.resetSyncToken.button')).onClick(async () => {
-					await this.plugin.resetSyncToken();
-				})
-			);
-
-		// Reconcile from cloud (cloud-as-truth recovery)
-		new Setting(containerEl)
-			.setName(t('settings.advanced.reconcileFromCloud.name'))
-			.setDesc(t('settings.advanced.reconcileFromCloud.desc'))
-			.addButton((button) =>
-				button.setButtonText(t('settings.advanced.reconcileFromCloud.button')).onClick(async () => {
-					await this.plugin.reconcileFromCloud();
-				})
-			);
-
-		// Force upload local → cloud (local-as-truth recovery)
-		new Setting(containerEl)
-			.setName(t('settings.advanced.reconcileToCloud.name'))
-			.setDesc(t('settings.advanced.reconcileToCloud.desc'))
-			.addButton((button) =>
-				button.setButtonText(t('settings.advanced.reconcileToCloud.button')).onClick(async () => {
-					await this.plugin.reconcileToCloud();
-				})
-			);
+		return {
+			name: t('settings.sync.status.name'),
+			desc: t('settings.sync.status.desc', {
+				status: statusText,
+				lastSync: lastSyncText,
+				progress: progressText,
+				conflicts: conflictText,
+			}),
+			render: (setting) => {
+				setting.addButton((btn) => {
+					btn
+						.setButtonText(t('settings.sync.status.syncNow'))
+						.setCta()
+						.onClick(() => {
+							void this.plugin.triggerManualSync();
+						});
+					if (!hasFolder) {
+						btn.setDisabled(true);
+						btn.setTooltip(t('settings.sync.status.selectFolderTooltip'));
+					}
+				});
+			},
+		};
 	}
 
 	private getSyncStatusText(status: SyncStatus): string {
@@ -537,51 +462,246 @@ export class KoofrSettingTab extends PluginSettingTab {
 		}
 	}
 
+	// ------------------------------------------------------------------
+	// Sync configuration
+	// ------------------------------------------------------------------
+
+	private closestIntervalIndex(minutes: number): number {
+		let bestIndex = 0;
+		let bestDiff = Infinity;
+		SYNC_INTERVAL_OPTIONS.forEach((opt, i) => {
+			const diff = Math.abs(opt.minutes - minutes);
+			if (diff < bestDiff) {
+				bestDiff = diff;
+				bestIndex = i;
+			}
+		});
+		return bestIndex;
+	}
+
+	private syncGroup(): SettingDefinitionItem {
+		const { configDir } = this.app.vault;
+
+		const intervalOptions: Record<string, string> = {};
+		SYNC_INTERVAL_OPTIONS.forEach((opt, i) => {
+			intervalOptions[String(i)] = opt.label;
+		});
+
+		const changeDelayOptions: Record<string, string> = {};
+		for (const seconds of CHANGE_DELAY_SECONDS) {
+			changeDelayOptions[String(seconds)] = t('settings.sync.changeDelay.seconds', { seconds });
+		}
+
+		return {
+			type: 'group',
+			heading: t('settings.sync.heading'),
+			items: [
+				{
+					name: t('settings.sync.automaticInterval.name'),
+					desc: t('settings.sync.automaticInterval.desc'),
+					control: { type: 'dropdown', key: 'syncInterval', options: intervalOptions },
+				},
+				{
+					name: t('settings.sync.onFileChange.name'),
+					desc: t('settings.sync.onFileChange.desc'),
+					control: { type: 'toggle', key: 'syncOnFileChange' },
+				},
+				{
+					name: t('settings.sync.changeDelay.name'),
+					desc: t('settings.sync.changeDelay.desc'),
+					control: { type: 'dropdown', key: 'syncOnChangeDelay', options: changeDelayOptions },
+				},
+				{
+					name: t('settings.sync.startupDelay.name'),
+					desc: t('settings.sync.startupDelay.desc'),
+					control: {
+						type: 'dropdown',
+						key: 'startupSyncDelay',
+						options: {
+							'0': t('settings.sync.startupDelay.disabled'),
+							'1': t('settings.sync.startupDelay.oneSecond'),
+							'10': t('settings.sync.startupDelay.tenSeconds'),
+							'30': t('settings.sync.startupDelay.thirtySeconds'),
+						},
+					},
+				},
+				{
+					name: t('settings.sync.conflictResolution.name'),
+					desc: t('settings.sync.conflictResolution.desc'),
+					control: {
+						type: 'dropdown',
+						key: 'conflictResolution',
+						options: {
+							[ConflictResolutionStrategy.LAST_WRITE_WINS]: t(
+								'settings.sync.conflictResolution.lastWriteWins'
+							),
+							[ConflictResolutionStrategy.CREATE_DUPLICATE]: t(
+								'settings.sync.conflictResolution.createDuplicate'
+							),
+							[ConflictResolutionStrategy.MANUAL]: t('settings.sync.conflictResolution.manual'),
+						},
+					},
+				},
+				{
+					name: t('settings.sync.appSettings.name'),
+					desc: t('settings.sync.appSettings.desc', { configDir }),
+					control: { type: 'toggle', key: 'syncAppSettings' },
+				},
+				{
+					name: t('settings.sync.plugins.name'),
+					desc: t('settings.sync.plugins.desc', { configDir }),
+					control: { type: 'toggle', key: 'syncPluginManifests' },
+				},
+				{
+					name: t('settings.sync.cssSnippets.name'),
+					desc: t('settings.sync.cssSnippets.desc', { configDir }),
+					control: { type: 'toggle', key: 'syncCssSnippets' },
+				},
+				this.excludePatternsItem(),
+			],
+		};
+	}
+
 	/**
-	 * Display experimental settings section
+	 * Excluded patterns — a plain editor over the vault-root .syncIgnore file.
+	 * The sync engine re-reads that file on every run, so writing it here is
+	 * all that's needed. Rendered imperatively (not as a `textarea` control)
+	 * so it is saved on blur instead of on every keystroke.
 	 */
-	private displayExperimentalSection(containerEl: HTMLElement): void {
-		const detailsEl = containerEl.createEl('details', { cls: 'koofr-experimental-section' });
-		const summaryEl = detailsEl.createEl('summary');
-		new Setting(summaryEl).setName(t('settings.experimental.heading')).setHeading();
+	private excludePatternsItem(): SettingDefinition {
+		return {
+			name: t('settings.sync.excludePatterns.name'),
+			desc: descLines(
+				t('settings.sync.excludePatterns.desc'),
+				t('settings.sync.excludePatterns.fileHint', { file: SYNC_IGNORE_FILE })
+			),
+			render: (setting) => {
+				setting.addTextArea((textArea) => {
+					textArea.setPlaceholder(t('settings.sync.excludePatterns.placeholder'));
+					textArea.inputEl.rows = 5;
+					textArea.inputEl.addClass('koofr-sync-exclude-patterns');
 
-		new Setting(detailsEl).setDesc(t('settings.experimental.description'));
+					let loaded = '';
+					void this.plugin.readSyncIgnore().then((content) => {
+						loaded = content;
+						textArea.setValue(content);
+					});
 
-		// Max concurrent operations
-		new Setting(detailsEl)
-			.setName(t('settings.experimental.maxConcurrentOperations.name'))
-			.setDesc(t('settings.experimental.maxConcurrentOperations.desc'))
-			.addText((text) =>
-				text
-					.setPlaceholder(t('settings.experimental.maxConcurrentOperations.placeholder'))
-					.setValue(String(this.plugin.getExperimentalSetting('maxConcurrentOperations')))
-					.onChange(async (value) => {
-						const parsed = parseInt(value, 10);
-						if (Number.isNaN(parsed) || parsed < 1 || parsed > 16) return;
-						this.plugin.settings.experimental = {
-							...DEFAULT_EXPERIMENTAL_SETTINGS,
-							...this.plugin.settings.experimental,
-							maxConcurrentOperations: parsed,
-						};
-						await this.plugin.saveSettings();
-					})
-			);
+					textArea.inputEl.addEventListener('blur', () => {
+						const value = textArea.getValue();
+						if (value === loaded) return;
+						void this.plugin.writeSyncIgnore(value).then(
+							() => {
+								loaded = value;
+								new Notice(t('settings.sync.excludePatterns.saved'));
+							},
+							(error: unknown) => {
+								new Notice(
+									t('settings.sync.excludePatterns.saveFailed', {
+										message: error instanceof Error ? error.message : String(error),
+									})
+								);
+							}
+						);
+					});
+				});
+			},
+		};
+	}
 
-		// Pull-only mode
-		new Setting(detailsEl)
-			.setName(t('settings.experimental.pullOnlyMode.name'))
-			.setDesc(t('settings.experimental.pullOnlyMode.desc'))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.getExperimentalSetting('pullOnlyMode'))
-					.onChange(async (value) => {
-						this.plugin.settings.experimental = {
-							...DEFAULT_EXPERIMENTAL_SETTINGS,
-							...this.plugin.settings.experimental,
-							pullOnlyMode: value,
-						};
-						await this.plugin.saveSettings();
-					})
-			);
+	// ------------------------------------------------------------------
+	// Advanced
+	// ------------------------------------------------------------------
+
+	private advancedGroup(): SettingDefinitionItem {
+		return {
+			type: 'group',
+			heading: t('settings.advanced.heading'),
+			items: [
+				{
+					name: t('settings.advanced.logLevel.name'),
+					desc: t('settings.advanced.logLevel.desc'),
+					control: {
+						type: 'dropdown',
+						key: 'logLevel',
+						options: {
+							off: t('settings.advanced.logLevel.off'),
+							error: t('settings.advanced.logLevel.error'),
+							warn: t('settings.advanced.logLevel.warn'),
+							info: t('settings.advanced.logLevel.info'),
+							debug: t('settings.advanced.logLevel.debug'),
+						},
+					},
+				},
+				{
+					name: t('settings.advanced.largeDeleteThreshold.name'),
+					desc: t('settings.advanced.largeDeleteThreshold.desc'),
+					control: {
+						type: 'number',
+						key: 'largeDeleteThreshold',
+						min: 0,
+						placeholder: t('settings.advanced.largeDeleteThreshold.placeholder'),
+					},
+				},
+				this.actionButtonItem('resetSyncToken', () => this.plugin.resetSyncToken(), false),
+				this.actionButtonItem('reconcileFromCloud', () => this.plugin.reconcileFromCloud(), true),
+				this.actionButtonItem('reconcileToCloud', () => this.plugin.reconcileToCloud(), true),
+			],
+		};
+	}
+
+	private actionButtonItem(
+		key: 'resetSyncToken' | 'reconcileFromCloud' | 'reconcileToCloud',
+		run: () => Promise<void>,
+		destructive: boolean
+	): SettingDefinition {
+		return {
+			name: t(`settings.advanced.${key}.name`),
+			desc: t(`settings.advanced.${key}.desc`),
+			render: (setting) => {
+				setting.addButton((button) => {
+					button.setButtonText(t(`settings.advanced.${key}.button`));
+					if (destructive) button.setDestructive();
+					button.onClick(() => {
+						void run();
+					});
+				});
+			},
+		};
+	}
+
+	// ------------------------------------------------------------------
+	// Experimental
+	// ------------------------------------------------------------------
+
+	private experimentalPage(): SettingDefinitionItem {
+		return {
+			type: 'page',
+			name: t('settings.experimental.heading'),
+			desc: t('settings.experimental.description'),
+			items: [
+				{
+					type: 'group',
+					items: [
+						{
+							name: t('settings.experimental.maxConcurrentOperations.name'),
+							desc: t('settings.experimental.maxConcurrentOperations.desc'),
+							control: {
+								type: 'number',
+								key: 'maxConcurrentOperations',
+								min: 1,
+								max: 16,
+								placeholder: t('settings.experimental.maxConcurrentOperations.placeholder'),
+							},
+						},
+						{
+							name: t('settings.experimental.pullOnlyMode.name'),
+							desc: t('settings.experimental.pullOnlyMode.desc'),
+							control: { type: 'toggle', key: 'pullOnlyMode' },
+						},
+					],
+				},
+			],
+		};
 	}
 }
