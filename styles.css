@@ -7,10 +7,6 @@
 	padding-left: 0;
 }
 
-.koofr-sync-settings-help {
-	margin-top: 4px;
-}
-
 .koofr-sync-exclude-patterns {
 	width: 100%;
 	min-height: 6em;
@@ -542,34 +538,6 @@
 
 .koofr-status-text {
 	margin-left: 5px;
-}
-
-/* Collapsible experimental section */
-.koofr-experimental-section {
-	margin-top: 1em;
-}
-
-.koofr-experimental-section summary {
-	cursor: pointer;
-	list-style: none;
-}
-
-.koofr-experimental-section summary::-webkit-details-marker {
-	display: none;
-}
-
-.koofr-experimental-section summary .setting-item {
-	margin-bottom: 0;
-}
-
-.koofr-experimental-section summary .setting-item-heading::before {
-	content: '▶ ';
-	font-size: 0.8em;
-	margin-right: 0.3em;
-}
-
-.koofr-experimental-section[open] summary .setting-item-heading::before {
-	content: '▼ ';
 }
 
 .koofr-sync-conflict-header {
