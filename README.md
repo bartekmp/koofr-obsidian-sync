@@ -54,18 +54,19 @@ Sync your Obsidian vault with **[Koofr](https://koofr.eu)** cloud storage. Event
 
 ### Settings reference
 
-| Setting                 | Description                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------- |
-| **Sync Interval**       | Periodic sync interval. Set to "Manual" to disable timer-based sync.                  |
-| **Sync on file change** | Disable to only sync on the interval or manually.                                     |
-| **Startup Sync Delay**  | Delay before first sync after launch (0 = disabled, 10 s recommended).                |
-| **Conflict Resolution** | Last write wins (default), create duplicate, or manual review.                        |
-| **Sync App Settings**   | Optional — sync `.obsidian/app.json`, `appearance.json`, `hotkeys.json`.              |
-| **Sync Plugins**        | Optional — sync plugin lists, manifests, and binaries (not plugin data files).        |
-| **Sync CSS Snippets**   | Optional — sync `.obsidian/snippets/`.                                                |
-| **Excluded Patterns**   | Glob patterns for files/folders to skip, stored in `.syncIgnore`. See below.          |
-| **Pull-Only Mode**      | (Experimental) Download only, never upload local edits.                               |
-| **Debug Logging**       | Writes a daily log under `_KoofrSyncLogs/YYYY-MM-DD.md` (device-local, never synced). |
+| Setting                          | Description                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------- |
+| **Sync Interval**                | Periodic sync interval. Set to "Manual" to disable timer-based sync.                  |
+| **Sync on file change**          | Disable to only sync on the interval or manually.                                     |
+| **Delay before syncing changes** | Quiet period after your last edit before auto-sync fires (3–60 s, default 3).         |
+| **Startup Sync Delay**           | Delay before first sync after launch (0 = disabled, 10 s recommended).                |
+| **Conflict Resolution**          | Last write wins (default), create duplicate, or manual review.                        |
+| **Sync App Settings**            | Optional — sync `.obsidian/app.json`, `appearance.json`, `hotkeys.json`.              |
+| **Sync Plugins**                 | Optional — sync plugin lists, manifests, and binaries (not plugin data files).        |
+| **Sync CSS Snippets**            | Optional — sync `.obsidian/snippets/`.                                                |
+| **Excluded Patterns**            | Glob patterns for files/folders to skip, stored in `.syncIgnore`. See below.          |
+| **Pull-Only Mode**               | (Experimental) Download only, never upload local edits.                               |
+| **Debug Logging**                | Writes a daily log under `_KoofrSyncLogs/YYYY-MM-DD.md` (device-local, never synced). |
 
 Under **Authentication**, a **Test connection** button verifies your stored credentials still work by making a lightweight authenticated request — handy since Koofr has no documented token lifetime.
 
@@ -101,6 +102,7 @@ Koofr's REST API has no incremental "what changed since X" endpoint. Every sync 
 
 ## Known limitations
 
+- **Large file downloads**: Files over 8 MB are fetched in ranged chunks to keep memory low on mobile. If the server ignores `Range`, the whole file is downloaded in one request.
 - **Large file uploads**: Koofr's upload endpoint accepts a whole file in a single request — there's no chunked/resumable upload API for very large attachments.
 - **Token expiry**: Koofr has no documented refresh-token flow. The plugin re-authenticates from your stored app password whenever a request returns 401.
 - **English only**: The i18n infrastructure is in place (`src/i18n/`), but only English strings ship currently. Contributions welcome.
